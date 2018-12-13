@@ -425,14 +425,23 @@ class CrawlerController
         // realurl support (thanks to Ingo Renner)
         if (ExtensionManagementUtility::isLoaded('realurl') && $vv['subCfg']['realurl']) {
 
-            /** @var tx_realurl $urlObj */
-            $urlObj = GeneralUtility::makeInstance('tx_realurl');
+            $realUrlVersion = ExtensionManagementUtility::getExtensionVersion('realurl');
+
+            if (version_compare($realUrlVersion, '2.0.0', '<')) {
+                /** @var tx_realurl $urlObj */
+                $urlObj = GeneralUtility::makeInstance('tx_realurl');
+            } else {
+                $urlObj = \TYPO3\CMS\Core\Utility\GeneralUtility::makeInstance(\DmitryDulepov\Realurl\Encoder\UrlEncoder::class);
+            }
 
             if (!empty($vv['subCfg']['baseUrl'])) {
                 $urlParts = parse_url($vv['subCfg']['baseUrl']);
                 $host = strtolower($urlParts['host']);
+
+                // TODO: This can not work for RealURL 2.0 as the host is not a property of UrlEncoder::class
                 $urlObj->host = $host;
 
+                // TODO: This can not work for RealURL 2.0 as the extConf is not a property of UrlEncoder::class
                 // First pass, finding configuration OR pointer string:
                 $urlObj->extConf = isset($GLOBALS['TYPO3_CONF_VARS']['EXTCONF']['realurl'][$urlObj->host]) ? $GLOBALS['TYPO3_CONF_VARS']['EXTCONF']['realurl'][$urlObj->host] : $GLOBALS['TYPO3_CONF_VARS']['EXTCONF']['realurl']['_DEFAULT'];
 
@@ -473,14 +482,29 @@ class CrawlerController
                     // realurl support (thanks to Ingo Renner)
                     $urlQuery = 'index.php' . $urlQuery;
                     if (ExtensionManagementUtility::isLoaded('realurl') && $vv['subCfg']['realurl']) {
+
+                        if (version_compare($realUrlVersion, '2.0.0', '<')) {
+                            // realurl checks the url including the absRefPrefix, so it's important to add it here
+                            $urlQuery = $GLOBALS['TSFE']->absRefPrefix . 'index.php' . $urlQuery;
+                        }
+
                         $params = [
                             'LD' => [
                                 'totalURL' => $urlQuery
                             ],
                             'TCEmainHook' => true
                         ];
-                        $urlObj->encodeSpURL($params);
-                        $urlQuery = $params['LD']['totalURL'];
+
+                        if (version_compare($realUrlVersion, '2.0.0', '<')) {
+                            $urlObj->encodeSpURL($params);
+                            $urlQuery = $params['LD']['totalURL'];
+
+                        } else {
+                            $urlObj->encodeUrl($params);
+                            $urlQuery = $params['LD']['totalURL'];
+                            // due to duplicate path segments and slashes the crawler does not check, the absRefPrefix has to be removed after real url encoding
+                            $urlQuery = substr($urlQuery, strlen($GLOBALS['TSFE']->absRefPrefix));
+                        }
                     }
 
                     // Scheduled time:
