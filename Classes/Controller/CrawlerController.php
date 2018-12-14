@@ -425,6 +425,10 @@ class CrawlerController
         // realurl support (thanks to Ingo Renner)
         if (ExtensionManagementUtility::isLoaded('realurl') && $vv['subCfg']['realurl']) {
 
+            if ($GLOBALS['TSFE'] === null) {
+                $this->initTSFE((int) $pageRow['uid']);
+            }
+
             $realUrlVersion = ExtensionManagementUtility::getExtensionVersion('realurl');
 
             if (version_compare($realUrlVersion, '2.0.0', '<')) {
