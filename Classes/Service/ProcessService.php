@@ -127,7 +127,7 @@ class ProcessService
             }
             sleep(1);
             if ($nextTimeOut < time()) {
-                $timedOutProcesses = $this->processRepository->findAll('', 'DESC', null, 0, 'ttl >' . $nextTimeOut);
+                $timedOutProcesses = $this->processRepository->findAllTimedOut($nextTimeOut);
                 $nextTimeOut = time() + $this->timeToLive;
                 if ($this->verbose) {
                     echo 'Cleanup' . implode(',', $timedOutProcesses->getProcessIds()) . chr(10);

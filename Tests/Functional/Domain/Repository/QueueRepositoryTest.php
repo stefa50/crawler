@@ -35,7 +35,7 @@ use Nimut\TestingFramework\TestCase\FunctionalTestCase;
  *
  * @package AOE\Crawler\Tests\Functional\Domain\Repository
  */
-class QueryRepositoryTest extends FunctionalTestCase
+class QueueRepositoryTest extends FunctionalTestCase
 {
 
     /**

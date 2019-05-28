@@ -94,6 +94,17 @@ class ProcessRepositoryTest extends FunctionalTestCase
     /**
      * @test
      */
+    public function findAllTimedOutReturnsTimedOut(): void
+    {
+        $this->assertSame(
+            4,
+            $this->subject->findAllTimedOut(12)->count()
+        );
+    }
+
+    /**
+     * @test
+     */
     public function removeByProcessId()
     {
         $this->assertSame(

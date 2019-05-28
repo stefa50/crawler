@@ -114,6 +114,33 @@ class ProcessRepository extends AbstractRepository
     }
 
     /**
+     * @param int $nextTimeout
+     *
+     * @return ProcessCollection
+     */
+    public function findAllTimedOut($nextTimeout): ProcessCollection
+    {
+        /** @var ProcessCollection $collection */
+        $collection = GeneralUtility::makeInstance(ProcessCollection::class);
+        $queryBuilder = GeneralUtility::makeInstance(ConnectionPool::class)->getQueryBuilderForTable($this->tableName);
+
+        $statement = $queryBuilder
+            ->select('*')
+            ->from($this->tableName)
+            ->where(
+                $queryBuilder->expr()->gt('ttl', intval($nextTimeout))
+            )
+            ->orderBy('ttl', 'DESC')
+            ->execute();
+
+        while ($row = $statement->fetch()) {
+            $collection->append(GeneralUtility::makeInstance(Process::class, $row));
+        }
+
+        return $collection;
+    }
+
+    /**
      * @param int $processId
      *
      * @return void

@@ -1131,13 +1131,15 @@ class BackendModule extends AbstractFunctionModule
         $queueRepository = new QueueRepository();
 
         $mode = $this->pObj->MOD_SETTINGS['processListMode'];
-        $where = '';
         if ($mode == 'simple') {
-            $where = 'active = 1';
+            $allProcesses = $processRepository->findAllActive();
+            $allCount = $processRepository->countActive();
+        } else {
+            // TODO: Check Offset + per page can be handled by fluid?
+            //$allProcesses = $processRepository->findAll('ttl', 'DESC', $perpage, $offset, $where);
+            $allProcesses = $processRepository->findAll();
+            $allCount = $processRepository->countAll();
         }
-
-        $allProcesses = $processRepository->findAll('ttl', 'DESC', $perpage, $offset, $where);
-        $allCount = $processRepository->countAll($where);
 
         $listView = new ProcessListView();
         $listView->setPageId($this->pObj->id);
