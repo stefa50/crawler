@@ -54,11 +54,17 @@ class ProcessCollectionTest extends UnitTestCase
     public function getProcessIdsReturnsArray()
     {
         /** @var Process $processOne */
-        $processOne = new Process();
+        $processOne = $this->getMockBuilder(Process::class)
+            ->setMethods(['dummy'])
+            ->disableOriginalConstructor()
+            ->getMock();
         $processOne->setProcessId(11);
 
         /** @var Process $processTwo */
-        $processTwo = new Process();
+        $processTwo = $this->getMockBuilder(Process::class)
+            ->setMethods(['dummy'])
+            ->disableOriginalConstructor()
+            ->getMock();
         $processTwo->setProcessId(13);
 
         $processes = [];
