@@ -26,10 +26,13 @@ namespace AOE\Crawler\Api;
  ***************************************************************/
 
 use AOE\Crawler\Controller\CrawlerController;
+use AOE\Crawler\Domain\Model\Queue;
 use AOE\Crawler\Domain\Repository\ProcessRepository;
 use AOE\Crawler\Domain\Repository\QueueRepository;
+use TYPO3\CMS\Core\Database\ConnectionPool;
 use TYPO3\CMS\Core\Utility\GeneralUtility;
 use TYPO3\CMS\Core\Utility\MathUtility;
+use TYPO3\CMS\Extbase\Object\ObjectManager;
 use TYPO3\CMS\Frontend\Page\PageRepository;
 
 /**
@@ -53,6 +56,11 @@ class CrawlerApi
      * @var $allowedConfigurations array
      */
     protected $allowedConfigurations = [];
+
+    /**
+     * @var string
+     */
+    protected $tableQueue = 'tx_crawler_queue';
 
     /**
      * Each crawler run has a setid, this facade method delegates
@@ -92,6 +100,12 @@ class CrawlerApi
     public function getSetId()
     {
         return $this->findCrawler()->setID;
+    }
+
+    public function __construct()
+    {
+        $objectManager = GeneralUtility::makeInstance(ObjectManager::class);
+        $this->queueRepository = $objectManager->get(QueueRepository::class);
     }
 
     /**
@@ -235,6 +249,8 @@ class CrawlerApi
      * @param bool $timed_only
      * @param bool $timestamp
      *
+     * @deprecated since crawler v6.5.0, will be removed in crawler v7.0.0.
+     *
      * @return bool
      */
     public function isPageInQueue($uid, $unprocessed_only = true, $timed_only = false, $timestamp = false)
@@ -284,25 +300,27 @@ class CrawlerApi
     public function getLatestCrawlTimestampForPage($uid, $future_crawldates_only = false, $unprocessed_only = false)
     {
         $uid = intval($uid);
-        $query = 'max(scheduled) as latest';
-        $where = ' page_id = ' . $uid;
+        $queryBuilder = GeneralUtility::makeInstance(ConnectionPool::class)->getQueryBuilderForTable($this->tableQueue);
+        $statement = $queryBuilder
+            ->selectLiteral('max(scheduled) as latest')
+            ->from($this->tableQueue)
+            ->where(
+                $queryBuilder->expr()->eq('page_id', $queryBuilder->createNamedParameter($uid, \PDO::PARAM_INT))
+            );
 
         if ($future_crawldates_only) {
-            $where .= ' AND scheduled > ' . time();
+            $statement->andWhere(
+                $queryBuilder->expr()->eq('scheduled', time())
+            );
         }
 
         if ($unprocessed_only) {
-            $where .= ' AND exec_time = 0';
+            $statement->andWhere(
+                $queryBuilder->expr()->eq('exec_time', 0)
+            );
         }
 
-        $rs = $GLOBALS['TYPO3_DB']->exec_SELECTquery($query, 'tx_crawler_queue', $where);
-        if ($row = $GLOBALS['TYPO3_DB']->sql_fetch_assoc($rs)) {
-            $res = $row['latest'];
-        } else {
-            $res = 0;
-        }
-
-        return $res;
+        return $statement->execute()->fetchColumn(0);
     }
 
     /**
@@ -311,27 +329,38 @@ class CrawlerApi
      * scheduled but have note been crawled yet.
      *
      * @param int $uid uid of the page
-     * @param bool $limit
+     * @param int $limit
      *
      * @return array array with the crawl-history of a page => 0 : scheduled time , 1 : executed_time, 2 : set_id
      */
     public function getCrawlHistoryForPage($uid, $limit = 0)
     {
-        $uid = intval($uid);
-        $limit = intval($limit);
+        /** @var  $queryBuilder */
+        $queryBuilder = GeneralUtility::makeInstance(ConnectionPool::class)->getQueryBuilderForTable($this->tableQueue);
+        $statement = $queryBuilder
+            ->from($this->tableQueue)
+            ->selectLiteral('scheduled, exec_time, set_id')
+            ->where(
+                $queryBuilder->expr()->eq('page_id', $queryBuilder->createNamedParameter($uid, \PDO::PARAM_INT))
+            );
 
-        $query = 'scheduled, exec_time, set_id';
-        $where = ' page_id = ' . $uid;
+        if ($limit) {
+            $statement->setMaxResults($limit);
+        }
 
-        $limit_query = ($limit) ? $limit : null;
+        $statement = $statement->execute();
 
-        $rows = $GLOBALS['TYPO3_DB']->exec_SELECTgetRows($query, 'tx_crawler_queue', $where, null, null, $limit_query);
+        $rows = [];
+        while (($row = $statement->fetch()) !== false) {
+            $rows[] = $row;
+        }
         return $rows;
     }
 
     /**
      * Method to determine unprocessed Items in the crawler queue.
      *
+     * @deprecated since crawler v6.5.0, will be removed in crawler v7.0.0.
      * @return array
      */
     public function getUnprocessedItems()
@@ -351,6 +380,9 @@ class CrawlerApi
      * Method to get the number of unprocessed items in the crawler
      *
      * @param int number of unprocessed items in the queue
+     * @deprecated since crawler v6.5.0, will be removed in crawler v7.0.0. Please use the QueueRepository instead
+     *
+     * @return array
      */
     public function countUnprocessedItems()
     {
@@ -374,8 +406,7 @@ class CrawlerApi
     public function isPageInQueueTimed($uid, $show_unprocessed = true)
     {
         $uid = intval($uid);
-
-        return $this->isPageInQueue($uid, $show_unprocessed);
+        return $this->queueRepository->isPageInQueue($uid, $show_unprocessed);
     }
 
     /**
@@ -396,6 +427,9 @@ class CrawlerApi
      * Removes an queue entry with a given queue id
      *
      * @param int $qid
+     * @deprecated since crawler v6.5.0, will be removed in crawler v7.0.0. please use the QueueRepository instead
+     *
+     * @return void
      */
     public function removeQueueEntrie($qid)
     {

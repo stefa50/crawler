@@ -1,10 +1,10 @@
 <?php
-namespace AOE\Crawler\Domain\Repository;
+namespace AOE\Crawler\Utility;
 
 /***************************************************************
  *  Copyright notice
  *
- *  (c) 2016 AOE GmbH <dev@aoe.com>
+ *  (c) 2019 AOE GmbH <dev@aoe.com>
  *
  *  All rights reserved
  *
@@ -25,42 +25,31 @@ namespace AOE\Crawler\Domain\Repository;
  *  This copyright notice MUST APPEAR in all copies of the script!
  ***************************************************************/
 
+use TYPO3\CMS\Core\Configuration\ExtensionConfiguration;
+use TYPO3\CMS\Core\Utility\GeneralUtility;
+use TYPO3\CMS\Core\Utility\VersionNumberUtility;
+
 /**
- * Class AbstractRepository
- *
- * @package AOE\Crawler\Domain\Repository
+ * Class ExtensionSettingUtility
  */
-abstract class AbstractRepository
+class ExtensionSettingUtility
 {
-
     /**
-     * @var string table name
-     */
-    protected $tableName;
-
-    /**
-     * Counts items by a given where clause
+     * Load extension settings
      *
-     * @param  string $where
-     *
-     * @return integer
+     * @return array
      */
-    protected function countByWhere($where)
+    public static function loadExtensionSettings()
     {
-        $db = $this->getDB();
-        $rs = $db->exec_SELECTquery('count(*) as anz', $this->tableName, $where);
-        $res = $db->sql_fetch_assoc($rs);
+        $isVersionLowerThan9 = VersionNumberUtility::convertVersionNumberToInteger(TYPO3_version) < 9000000;
+        if ($isVersionLowerThan9) {
+            $extensionSettings = unserialize($GLOBALS['TYPO3_CONF_VARS']['EXT']['extConf']['crawler']);
+        } else {
+            $extensionSettings = GeneralUtility::makeInstance(ExtensionConfiguration::class)->get('crawler');
+        }
 
-        return $res['anz'];
+        return $extensionSettings;
     }
 
-    /**
-     * Returns an instance of the TYPO3 database class.
-     *
-     * @return \TYPO3\CMS\Core\Database\DatabaseConnection
-     */
-    protected function getDB()
-    {
-        return $GLOBALS['TYPO3_DB'];
-    }
+
 }

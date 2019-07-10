@@ -25,10 +25,13 @@ namespace AOE\Crawler\Tests\Functional\Api;
  *  This copyright notice MUST APPEAR in all copies of the script!
  ***************************************************************/
 
+use Aoe\CongstarXmlsitemap\Scheduler\GenerateSitemapTask;
 use AOE\Crawler\Api\CrawlerApi;
 use AOE\Crawler\Controller\CrawlerController;
 use AOE\Crawler\Domain\Repository\QueueRepository;
 use Nimut\TestingFramework\TestCase\FunctionalTestCase;
+use TYPO3\CMS\Core\Utility\GeneralUtility;
+use TYPO3\CMS\Extbase\Object\ObjectManager;
 
 /**
  * Class CrawlerApiTest
@@ -60,12 +63,20 @@ class CrawlerApiTest extends FunctionalTestCase
     protected $oldRootline;
 
     /**
+     * @var
+     */
+    protected $queueRepository;
+
+    /**
      * Creates the test environment.
      *
      */
     public function setUp()
     {
         parent::setUp();
+
+        $objectManager = GeneralUtility::makeInstance(ObjectManager::class);
+        $this->queueRepository = $objectManager->get(QueueRepository::class);
 
         //restore old rootline
         $this->oldRootline = $GLOBALS['TYPO3_CONF_VARS']['FE']['addRootLineFields'];
@@ -200,7 +211,7 @@ class CrawlerApiTest extends FunctionalTestCase
         $this->importDataSet(dirname(__FILE__) . '/../Fixtures/tx_crawler_queue.xml');
 
         $this->assertSame(
-            '4321',
+            4321,
             $this->subject->getLatestCrawlTimestampForPage(17)
         );
     }
@@ -212,12 +223,12 @@ class CrawlerApiTest extends FunctionalTestCase
     {
         $this->importDataSet(dirname(__FILE__) . '/../Fixtures/tx_crawler_queue.xml');
 
-        $this->assertSame(
+        $this->assertEquals(
             [
                 [
-                    'scheduled' => '4321',
-                    'exec_time' => '20',
-                    'set_id' => '0'
+                    'scheduled' => 4321,
+                    'exec_time' => 20,
+                    'set_id' => 0
                 ]
             ],
             $this->subject->getCrawlHistoryForPage(17, 1)
@@ -231,7 +242,7 @@ class CrawlerApiTest extends FunctionalTestCase
     {
         $this->importDataSet(dirname(__FILE__) . '/../Fixtures/tx_crawler_queue.xml');
 
-        $this->assertSame(
+        $this->assertEquals(
             [
                 'assignedButUnprocessed' => '3',
                 'unprocessed' => '5'

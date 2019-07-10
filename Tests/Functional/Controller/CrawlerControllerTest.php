@@ -29,6 +29,7 @@ use AOE\Crawler\Controller\CrawlerController;
 use AOE\Crawler\Domain\Repository\ProcessRepository;
 use AOE\Crawler\Domain\Repository\QueueRepository;
 use Nimut\TestingFramework\TestCase\FunctionalTestCase;
+use TYPO3\CMS\Core\Utility\GeneralUtility;
 
 /**
  * Class CrawlerControllerTest
@@ -171,7 +172,7 @@ class CrawlerControllerTest extends FunctionalTestCase
      */
     public function flushQueue($where, $expected)
     {
-        $queryRepository = new QueueRepository();
+        $queryRepository = GeneralUtility::makeInstance(QueueRepository::class);
         $this->subject->_call('flushQueue', $where);
 
         $this->assertEquals(
@@ -217,6 +218,44 @@ class CrawlerControllerTest extends FunctionalTestCase
         $this->assertEquals(
             $expected,
             $this->subject->getLogEntriesForSetId($setId, $filter, $doFlush, $doFullFlush, $itemsPerPage)
+        );
+    }
+
+    /**
+     * @test
+     */
+    public function getConfigurationHash()
+    {
+        $configuration = [
+            'paramExpanded' => 'extendedParameter',
+            'URLs' => 'URLs',
+            'NotImportantParameter' => 'value not important'
+        ];
+
+        $originalCheckSum = md5(serialize($configuration));
+
+        $this->assertNotEquals(
+            $originalCheckSum,
+            $this->subject->_call('getConfigurationHash', $configuration)
+        );
+
+        unset($configuration['paramExpanded'], $configuration['URLs']);
+        $newCheckSum = md5(serialize($configuration));
+        $this->assertEquals(
+            $newCheckSum,
+            $this->subject->_call('getConfigurationHash', $configuration)
+        );
+    }
+
+    /**
+     * @test
+     * @dataProvider isCrawlingProtocolHttpsDataProvider
+     */
+    public function isCrawlingProtocolHttps($crawlerConfiguration, $pageConfiguration, $expected)
+    {
+        $this->assertEquals(
+            $expected,
+            $this->subject->_call(isCrawlingProtocolHttps, $crawlerConfiguration, $pageConfiguration)
         );
     }
 
@@ -393,8 +432,8 @@ class CrawlerControllerTest extends FunctionalTestCase
                 'where' => 'process_id = \'1007\'',
                 'expected' => 9
             ],
-            'Flush Queue for where that does not exist' => [
-                'where' => 'uid > 100000',
+            'Flush Queue for where that does not exist, nothing is deleted' => [
+                'where' => 'qid > 100000',
                 'expected' => 12
             ]
         ];
@@ -443,6 +482,35 @@ class CrawlerControllerTest extends FunctionalTestCase
             'Record found - uid and configurationHash is present' => [
                 'uid' => 2001,
                 'configurationHash' => '7b6919e533f334550b6f19034dfd2f81',
+                'expected' => false
+            ],
+        ];
+    }
+
+    /**
+     * @return array
+     */
+    public function isCrawlingProtocolHttpsDataProvider()
+    {
+        return [
+            'Crawler Configuration set to http' => [
+                'crawlerConfiguration' => -1,
+                'pageConfiguration' => true,
+                'expected' => false
+            ],
+            'Crawler Configuration set to https' => [
+                'crawlerConfiguration' => 1,
+                'pageConfiguration' => false,
+                'expected' => true
+            ],
+            'Crawler Configuration set to page-configuration' => [
+                'crawlerConfiguration' => 0,
+                'pageConfiguration' => true,
+                'expected' => true
+            ],
+            'Crawler Configuration default fallback' => [
+                'crawlerConfiguration' => 99,
+                'pageConfiguration' => true,
                 'expected' => false
             ],
         ];

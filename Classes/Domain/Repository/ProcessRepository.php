@@ -4,7 +4,7 @@ namespace AOE\Crawler\Domain\Repository;
 /***************************************************************
  *  Copyright notice
  *
- *  (c) 2017 AOE GmbH <dev@aoe.com>
+ *  (c) 2019 AOE GmbH <dev@aoe.com>
  *
  *  All rights reserved
  *
@@ -27,14 +27,19 @@ namespace AOE\Crawler\Domain\Repository;
 
 use AOE\Crawler\Domain\Model\Process;
 use AOE\Crawler\Domain\Model\ProcessCollection;
+use AOE\Crawler\Utility\ExtensionSettingUtility;
+use AOE\Crawler\Utility\ProcessUtility;
+use TYPO3\CMS\Core\Database\ConnectionPool;
 use TYPO3\CMS\Core\Utility\GeneralUtility;
+use TYPO3\CMS\Extbase\Object\ObjectManager;
+use TYPO3\CMS\Extbase\Persistence\Repository;
 
 /**
  * Class ProcessRepository
  *
  * @package AOE\Crawler\Domain\Repository
  */
-class ProcessRepository extends AbstractRepository
+class ProcessRepository extends Repository
 {
     /**
      * @var string
@@ -42,57 +47,86 @@ class ProcessRepository extends AbstractRepository
     protected $tableName = 'tx_crawler_process';
 
     /**
+     * @var array
+     */
+    protected $extensionSettings = [];
+
+    /**
+     * @var QueueRepository
+     */
+    protected $queueRepository;
+
+    public function __construct(\TYPO3\CMS\Extbase\Object\ObjectManagerInterface $objectManager)
+    {
+        parent::__construct($objectManager);
+        $this->extensionSettings = ExtensionSettingUtility::loadExtensionSettings();
+        $this->queueRepository = $objectManager->get(QueueRepository::class);
+    }
+
+    /**
      * This method is used to find all cli processes within a limit.
-     *
-     * @param  string $orderField
-     * @param  string $orderDirection
-     * @param  integer $itemCount
-     * @param  integer $offset
-     * @param  string $where
      *
      * @return ProcessCollection
      */
-    public function findAll($orderField = '', $orderDirection = 'DESC', $itemCount = null, $offset = null, $where = '')
+    public function findAll(): ProcessCollection
     {
         /** @var ProcessCollection $collection */
         $collection = GeneralUtility::makeInstance(ProcessCollection::class);
+        $queryBuilder = GeneralUtility::makeInstance(ConnectionPool::class)->getQueryBuilderForTable($this->tableName);
 
-        $orderField = trim($orderField);
-        $orderField = empty($orderField) ? 'process_id' : $orderField;
+        $statement = $queryBuilder
+            ->select('*')
+            ->from($this->tableName)
+            ->orderBy('ttl', 'DESC')
+            ->execute();
 
-        $orderDirection = strtoupper(trim($orderDirection));
-        $orderDirection = in_array($orderDirection, ['ASC', 'DESC']) ? $orderDirection : 'DESC';
-
-        $rows = $this->getDB()->exec_SELECTgetRows(
-            '*',
-            $this->tableName,
-            $where,
-            '',
-            htmlspecialchars($orderField) . ' ' . htmlspecialchars($orderDirection),
-            self::getLimitFromItemCountAndOffset($itemCount, $offset)
-        );
-
-        if (is_array($rows)) {
-            foreach ($rows as $row) {
-                $process = new Process();
-                $process->setProcessId($row['process_id']);
-                $collection->append($process);
-            }
+        while ($row = $statement->fetch()) {
+            $collection->append(GeneralUtility::makeInstance(Process::class, $row));
         }
 
         return $collection;
     }
 
     /**
-     * This method is used to count all processes in the process table.
-     *
-     * @param  string $where Where clause
-     *
-     * @return integer
+     * @return ProcessCollection
      */
-    public function countAll($where = '1 = 1')
+    public function findAllActive(): ProcessCollection
     {
-        return $this->countByWhere($where);
+        /** @var ProcessCollection $collection */
+        $collection = GeneralUtility::makeInstance(ProcessCollection::class);
+        $queryBuilder = GeneralUtility::makeInstance(ConnectionPool::class)->getQueryBuilderForTable($this->tableName);
+
+        $statement = $queryBuilder
+            ->select('*')
+            ->from($this->tableName)
+            ->where(
+                $queryBuilder->expr()->eq('active', 1),
+                $queryBuilder->expr()->eq('deleted', 0)
+            )
+            ->orderBy('ttl', 'DESC')
+            ->execute();
+
+        while ($row = $statement->fetch()) {
+            $collection->append(GeneralUtility::makeInstance(Process::class, $row));
+        }
+
+        return $collection;
+    }
+
+    /**
+     * @param int $processId
+     *
+     * @return void
+     */
+    public function removeByProcessId($processId): void
+    {
+        $queryBuilder = GeneralUtility::makeInstance(ConnectionPool::class)->getQueryBuilderForTable($this->tableName);
+
+        $queryBuilder
+            ->delete($this->tableName)
+            ->where(
+                $queryBuilder->expr()->eq('process_id', $queryBuilder->createNamedParameter($processId))
+            )->execute();
     }
 
     /**
@@ -102,7 +136,153 @@ class ProcessRepository extends AbstractRepository
      */
     public function countActive()
     {
-        return $this->countByWhere('active = 1 AND deleted = 0');
+        $queryBuilder = GeneralUtility::makeInstance(ConnectionPool::class)->getQueryBuilderForTable($this->tableName);
+        $count = $queryBuilder
+            ->count('*')
+            ->from($this->tableName)
+            ->where(
+                $queryBuilder->expr()->eq('active', 1),
+                $queryBuilder->expr()->eq('deleted', 0)
+            )
+            ->execute()
+            ->fetchColumn(0);
+
+        return $count;
+    }
+
+    /**
+     * @return array|null
+     *
+     * Function is moved from ProcessCleanUpHook
+     * TODO: Check why we need both getActiveProcessesOlderThanOneHour and getActiveOrphanProcesses, the get getActiveOrphanProcesses does not really check for Orphan in this implementation.
+     */
+    public function getActiveProcessesOlderThanOneHour()
+    {
+        $queryBuilder = GeneralUtility::makeInstance(ConnectionPool::class)->getQueryBuilderForTable($this->tableName);
+        $activeProcesses = [];
+        $statement = $queryBuilder
+            ->select('process_id', 'system_process_id')
+            ->from($this->tableName)
+            ->where(
+                $queryBuilder->expr()->lte('ttl', intval(time() - $this->extensionSettings['processMaxRunTime'] - 3600)),
+                $queryBuilder->expr()->eq('active', 1)
+            )
+            ->execute();
+
+        while ($row = $statement->fetch()) {
+            $activeProcesses[] = $row;
+        }
+
+        return $activeProcesses;
+    }
+
+    /**
+     * Function is moved from ProcessCleanUpHook
+     *
+     * @see getActiveProcessesOlderThanOneHour
+     * @return array
+     *
+     */
+    public function getActiveOrphanProcesses()
+    {
+        $queryBuilder = GeneralUtility::makeInstance(ConnectionPool::class)->getQueryBuilderForTable($this->tableName);
+        $statement = $queryBuilder
+            ->select('process_id', 'system_process_id')
+            ->from($this->tableName)
+            ->where(
+                $queryBuilder->expr()->lte('ttl', intval(time() - $this->extensionSettings['processMaxRunTime'])),
+                $queryBuilder->expr()->eq('active', 1)
+            )
+            ->execute()->fetchAll();
+
+        return $statement;
+    }
+
+    /**
+     * Remove active processes older than one hour
+     *
+     * @return void
+     */
+    public function removeActiveProcessesOlderThanOneHour()
+    {
+        $results = $this->getActiveProcessesOlderThanOneHour();
+        if (!is_array($results)) {
+            return;
+        }
+        foreach ($results as $result) {
+            $systemProcessId = (int)$result['system_process_id'];
+            $processId = $result['process_id'];
+            if ($systemProcessId > 1) {
+                if (ProcessUtility::doProcessStillExists($systemProcessId)) {
+                    ProcessUtility::killProcess($systemProcessId);
+                }
+                $this->removeProcessFromProcesslist($processId);
+            }
+        }
+    }
+
+    /**
+     * Removes active orphan processes from process list
+     *
+     * @return void
+     */
+    public function removeActiveOrphanProcesses()
+    {
+        $results = $this->getActiveOrphanProcesses();
+        if (!is_array($results)) {
+            return;
+        }
+        foreach ($results as $result) {
+            $processExists = false;
+            $systemProcessId = (int)$result['system_process_id'];
+            $processId = $result['process_id'];
+            if ($systemProcessId > 1) {
+                $dispatcherProcesses = ProcessUtility::findDispatcherProcesses();
+                if (!is_array($dispatcherProcesses) || empty($dispatcherProcesses)) {
+                    $this->removeProcessFromProcesslist($processId);
+                    return;
+                }
+                foreach ($dispatcherProcesses as $process) {
+                    $responseArray = $this->createResponseArray($process);
+                    if ($systemProcessId === (int)$responseArray[1]) {
+                        $processExists = true;
+                    };
+                }
+                if (!$processExists) {
+                    $this->removeProcessFromProcesslist($processId);
+                }
+            }
+        }
+    }
+
+    /**
+     * Create response array
+     * Convert string to array with space character as delimiter,
+     * removes all empty records to have a cleaner array
+     *
+     * @param string $string String to create array from
+     *
+     * @return array
+     *
+     */
+    private function createResponseArray($string)
+    {
+        $responseArray = GeneralUtility::trimExplode(' ', $string, true);
+        $responseArray = array_values($responseArray);
+        return $responseArray;
+    }
+
+    /**
+     * Remove a process from processlist
+     *
+     * @param string $processId Unique process Id.
+     *
+     * @return void
+     */
+    private function removeProcessFromProcesslist($processId)
+    {
+        $this->removeByProcessId($processId);
+        $this->queueRepository->unsetQueueProcessId($processId);
     }
 
     /**
@@ -114,7 +294,53 @@ class ProcessRepository extends AbstractRepository
      */
     public function countNotTimeouted($ttl)
     {
-        return $this->countByWhere('deleted = 0 AND ttl > ' . intval($ttl));
+        $queryBuilder = GeneralUtility::makeInstance(ConnectionPool::class)->getQueryBuilderForTable($this->tableName);
+        $count = $queryBuilder
+            ->count('*')
+            ->from($this->tableName)
+            ->where(
+                $queryBuilder->expr()->eq('deleted', 0),
+                $queryBuilder->expr()->gt('ttl', intval($ttl))
+            )
+            ->execute()
+            ->fetchColumn(0);
+
+        return $count;
+    }
+
+    /**
+     * Counts all in repository
+     *
+     * @return integer
+     */
+    public function countAll()
+    {
+        $queryBuilder = GeneralUtility::makeInstance(ConnectionPool::class)->getQueryBuilderForTable($this->tableName);
+        $count = $queryBuilder
+            ->count('*')
+            ->from($this->tableName)
+            ->execute()
+            ->fetchColumn(0);
+        return $count;
+    }
+
+    /**
+     * @param $processId
+     *
+     * @return bool|string
+     */
+    public function countAllByProcessId($processId)
+    {
+        $queryBuilder = GeneralUtility::makeInstance(ConnectionPool::class)->getQueryBuilderForTable($this->tableName);
+        $count = $queryBuilder
+            ->count('*')
+            ->from($this->tableName)
+            ->where(
+                $queryBuilder->expr()->eq('process_id', $queryBuilder->createNamedParameter($processId))
+            )
+            ->execute()
+            ->fetchColumn(0);
+        return $count;
     }
 
     /**
@@ -125,12 +351,48 @@ class ProcessRepository extends AbstractRepository
      *
      * @return string
      */
-    public static function getLimitFromItemCountAndOffset($itemCount, $offset)
+    public static function getLimitFromItemCountAndOffset($itemCount, $offset): string
     {
         $itemCount = filter_var($itemCount, FILTER_VALIDATE_INT, ['options' => ['min_range' => 1, 'default' => 20]]);
         $offset = filter_var($offset, FILTER_VALIDATE_INT, ['options' => ['min_range' => 0, 'default' => 0]]);
         $limit = $offset . ', ' . $itemCount;
 
         return $limit;
+    }
+
+    /**
+     * @return void
+     */
+    public function deleteProcessesWithoutItemsAssigned()
+    {
+        $queryBuilder = GeneralUtility::makeInstance(ConnectionPool::class)->getQueryBuilderForTable($this->tableName);
+        $queryBuilder
+            ->delete($this->tableName)
+            ->where(
+                $queryBuilder->expr()->eq('assigned_items_count', 0)
+            )
+            ->execute();
+    }
+
+    public function deleteProcessesMarkedAsDeleted()
+    {
+        $queryBuilder = GeneralUtility::makeInstance(ConnectionPool::class)->getQueryBuilderForTable($this->tableName);
+        $queryBuilder
+            ->delete($this->tableName)
+            ->where(
+                $queryBuilder->expr()->eq('deleted', 1)
+            )
+            ->execute();
+    }
+
+    /**
+     * Returns an instance of the TYPO3 database class.
+     *
+     * @return \TYPO3\CMS\Core\Database\DatabaseConnection
+     * @deprecated since crawler v7.0.0, will be removed in crawler v8.0.0.
+     */
+    protected function getDB()
+    {
+        return $GLOBALS['TYPO3_DB'];
     }
 }

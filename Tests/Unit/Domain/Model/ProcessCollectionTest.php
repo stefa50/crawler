@@ -54,11 +54,11 @@ class ProcessCollectionTest extends UnitTestCase
     public function getProcessIdsReturnsArray()
     {
         /** @var Process $processOne */
-        $processOne = $this->createPartialMock(Process::class, ['dummy']);
+        $processOne = new Process();
         $processOne->setProcessId(11);
 
         /** @var Process $processTwo */
-        $processTwo = $this->createPartialMock(Process::class, ['dummy']);
+        $processTwo = new Process();
         $processTwo->setProcessId(13);
 
         $processes = [];

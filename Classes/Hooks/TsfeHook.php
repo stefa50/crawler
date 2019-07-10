@@ -25,12 +25,21 @@ namespace AOE\Crawler\Hooks;
  *  This copyright notice MUST APPEAR in all copies of the script!
  ***************************************************************/
 
+use TYPO3\CMS\Core\Database\ConnectionPool;
+use TYPO3\CMS\Core\Utility\GeneralUtility;
+
 /**
  * Class TsfeHook
  * @package AOE\Crawler\Hooks
  */
 class TsfeHook
 {
+
+    /**
+     * @var string
+     */
+    protected $tableQueue = 'tx_crawler_queue';
+
     /**
      * Initialization hook (called after database connection)
      * Takes the "HTTP_X_T3CRAWLER" header and looks up queue record and verifies if the session comes from the system (by comparing hashes)
@@ -49,7 +58,16 @@ class TsfeHook
             //@todo: ask service to exclude current call for special reasons: for example no relevance because the language version is not affected
 
             list($queueId, $hash) = explode(':', $_SERVER['HTTP_X_T3CRAWLER']);
-            list($queueRec) = $GLOBALS['TYPO3_DB']->exec_SELECTgetRows('*', 'tx_crawler_queue', 'qid=' . intval($queueId));
+            $queryBuilder = GeneralUtility::makeInstance(ConnectionPool::class)->getQueryBuilderForTable($this->tableQueue);
+            $queueRec = $queryBuilder
+                ->from($this->tableQueue)
+                ->select('*')
+                ->where(
+                    $queryBuilder->expr()->eq('qid', $queryBuilder->createNamedParameter($queueId))
+                )
+                ->execute()
+                ->fetch();
+
 
             // If a crawler record was found and hash was matching, set it up:
             if (is_array($queueRec) && $hash === md5($queueRec['qid'] . '|' . $queueRec['set_id'] . '|' . $GLOBALS['TYPO3_CONF_VARS']['SYS']['encryptionKey'])) {

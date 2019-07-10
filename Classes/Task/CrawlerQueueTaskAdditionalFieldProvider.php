@@ -25,9 +25,13 @@ namespace AOE\Crawler\Task;
  *  This copyright notice MUST APPEAR in all copies of the script!
  ***************************************************************/
 
+use AOE\Crawler\Domain\Model\Configuration;
+use AOE\Crawler\Domain\Repository\ConfigurationRepository;
 use TYPO3\CMS\Backend\Utility\BackendUtility;
 use TYPO3\CMS\Core\Messaging\FlashMessage;
+use TYPO3\CMS\Core\Utility\GeneralUtility;
 use TYPO3\CMS\Core\Utility\MathUtility;
+use TYPO3\CMS\Extbase\Object\ObjectManager;
 use TYPO3\CMS\Scheduler\AdditionalFieldProviderInterface;
 use TYPO3\CMS\Scheduler\Controller\SchedulerModuleController;
 use TYPO3\CMS\Scheduler\Task\AbstractTask;
@@ -147,19 +151,10 @@ class CrawlerQueueTaskAdditionalFieldProvider implements AdditionalFieldProvider
      */
     protected function getCrawlerConfigurationRecords()
     {
-        $records = [];
-        $result = $GLOBALS['TYPO3_DB']->exec_SELECTquery(
-            '*',
-            'tx_crawler_configuration',
-            '1=1' . BackendUtility::deleteClause('tx_crawler_configuration')
-        );
+        $objectManager = GeneralUtility::makeInstance(ObjectManager::class);
+        $configurationRepository = $objectManager->get(ConfigurationRepository::class);
 
-        while ($row = $GLOBALS['TYPO3_DB']->sql_fetch_assoc($result)) {
-            $records[] = $row;
-        }
-        $GLOBALS['TYPO3_DB']->sql_free_result($result);
-
-        return $records;
+        return $configurationRepository->findAll();
     }
 
     /**
