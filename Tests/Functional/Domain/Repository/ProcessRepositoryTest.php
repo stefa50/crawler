@@ -25,6 +25,7 @@ namespace AOE\Crawler\Tests\Functional\Domain\Repository;
  *  This copyright notice MUST APPEAR in all copies of the script!
  ***************************************************************/
 
+use AOE\Crawler\Domain\Model\Process;
 use AOE\Crawler\Domain\Repository\ProcessRepository;
 use AOE\Crawler\Domain\Repository\QueueRepository;
 use Nimut\TestingFramework\TestCase\FunctionalTestCase;
@@ -78,23 +79,74 @@ class ProcessRepositoryTest extends FunctionalTestCase
     /**
      * @test
      */
-    public function findAllReturnsAll(): void
+    public function findAllReturnsAll()
     {
-        $this->assertSame(
+        $foreachWasTriggered = false;
+        $all = $this->subject->findAll();
+
+        $this->assertCount(
             5,
-            $this->subject->findAll()->count()
+            $all
         );
+
+        /** @var Process $process */
+        foreach ($all as $process) {
+
+            $this->assertGreaterThan(0, $process->getTtl());
+            $this->assertNotEmpty($process->getProcessId());
+            $this->assertEquals(
+                0,
+                $process->getAssignedItemsCount()
+            );
+
+            $this->assertEmpty($process->getSystemProcessId());
+
+            if (in_array($process->getProcessId(), ['1000', '1001', '1002'], true)) {
+                $this->assertTrue($process->isActive());
+                $this->assertFalse($process->isDeleted());
+            } else {
+                $this->assertFalse($process->isActive());
+                $this->assertTrue($process->isDeleted());
+            }
+            $foreachWasTriggered = true;
+        }
+
+        // Done to ensure we are having the assertion within the foreach as well.
+        $this->assertTrue($foreachWasTriggered);
     }
 
     /**
      * @test
      */
-    public function findAllActiveReturnsActive(): void
+    public function findAllActive()
     {
-        $this->assertSame(
+        $foreachWasTriggered = false;
+        $allActive = $this->subject->findAllActive();
+
+        $this->assertCount(
             3,
-            $this->subject->findAllActive()->count()
+            $allActive
         );
+
+        /** @var Process $activeProcess */
+        foreach ($allActive as $activeProcess) {
+            $this->assertGreaterThan(0, $activeProcess->getTtl());
+            $this->assertNotEmpty($activeProcess->getProcessId());
+            $this->assertTrue($activeProcess->isActive());
+            $this->assertFalse($activeProcess->isDeleted());
+
+            $this->assertEquals(
+                0,
+                $activeProcess->getAssignedItemsCount()
+            );
+
+            $this->assertEmpty($activeProcess->getSystemProcessId());
+            $foreachWasTriggered = true;
+        }
+
+        // Done to ensure we are having the assertion within the foreach as well.
+        $this->assertTrue($foreachWasTriggered);
+
     }
 
     /**

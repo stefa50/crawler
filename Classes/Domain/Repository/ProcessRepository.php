@@ -32,6 +32,7 @@ use AOE\Crawler\Utility\ProcessUtility;
 use TYPO3\CMS\Core\Database\ConnectionPool;
 use TYPO3\CMS\Core\Utility\GeneralUtility;
 use TYPO3\CMS\Extbase\Object\ObjectManager;
+use TYPO3\CMS\Extbase\Object\ObjectManagerInterface;
 use TYPO3\CMS\Extbase\Persistence\Repository;
 
 /**
@@ -56,11 +57,21 @@ class ProcessRepository extends Repository
      */
     protected $queueRepository;
 
-    public function __construct(\TYPO3\CMS\Extbase\Object\ObjectManagerInterface $objectManager)
+    /**
+     * @var ObjectManager
+     */
+    protected $objectManager;
+
+    public function injectObjectManager(ObjectManagerInterface $objectManager)
     {
-        parent::__construct($objectManager);
+        $this->objectManager = $objectManager;
+    }
+
+    public function __construct()
+    {
+        parent::__construct($this->objectManager);
         $this->extensionSettings = ExtensionSettingUtility::loadExtensionSettings();
-        $this->queueRepository = $objectManager->get(QueueRepository::class);
+        $this->queueRepository = $this->objectManager->get(QueueRepository::class);
     }
 
     /**
@@ -81,16 +92,19 @@ class ProcessRepository extends Repository
             ->execute();
 
         while ($row = $statement->fetch()) {
-            $collection->append(GeneralUtility::makeInstance(Process::class, $row));
+            $process = new Process();
+            $process->setProcessId($row['process_id']);
+            $process->setTtl($row['ttl']);
+            $process->setActive($row['active'] ? true : false);
+            $process->setAssignedItemsCount($row['assigned_items_count']);
+            $process->setDeleted($row['deleted'] ? true : false);
+            $collection->append($process);
         }
 
         return $collection;
     }
 
-    /**
-     * @return ProcessCollection
-     */
-    public function findAllActive(): ProcessCollection
+    public function findAllActive()
     {
         /** @var ProcessCollection $collection */
         $collection = GeneralUtility::makeInstance(ProcessCollection::class);
@@ -107,7 +121,13 @@ class ProcessRepository extends Repository
             ->execute();
 
         while ($row = $statement->fetch()) {
-            $collection->append(GeneralUtility::makeInstance(Process::class, $row));
+            $process = new Process();
+            $process->setProcessId($row['process_id']);
+            $process->setTtl($row['ttl']);
+            $process->setActive($row['active'] ? true : false);
+            $process->setAssignedItemsCount($row['assigned_items_count']);
+            $process->setDeleted($row['deleted'] ? true : false);
+            $collection->append($process);
         }
 
         return $collection;
@@ -179,9 +199,9 @@ class ProcessRepository extends Repository
     /**
      * Function is moved from ProcessCleanUpHook
      *
-     * @see getActiveProcessesOlderThanOneHour
      * @return array
      *
+     * @see getActiveProcessesOlderThanOneHour
      */
     public function getActiveOrphanProcesses()
     {
@@ -288,7 +308,7 @@ class ProcessRepository extends Repository
     /**
      * Returns the number of processes that live longer than the given timestamp.
      *
-     * @param  integer $ttl
+     * @param integer $ttl
      *
      * @return integer
      */
@@ -346,8 +366,8 @@ class ProcessRepository extends Repository
     /**
      * Get limit clause
      *
-     * @param  integer $itemCount
-     * @param  integer $offset
+     * @param integer $itemCount
+     * @param integer $offset
      *
      * @return string
      */

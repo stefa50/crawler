@@ -26,10 +26,16 @@ namespace AOE\Crawler\Tests\Functional\Controller;
  ***************************************************************/
 
 use AOE\Crawler\Controller\CrawlerController;
+use AOE\Crawler\Domain\Model\Process;
 use AOE\Crawler\Domain\Repository\ProcessRepository;
 use AOE\Crawler\Domain\Repository\QueueRepository;
+use Doctrine\DBAL\Query\QueryBuilder;
 use Nimut\TestingFramework\TestCase\FunctionalTestCase;
+use TYPO3\CMS\Core\Authentication\BackendUserAuthentication;
+use TYPO3\CMS\Core\Database\ConnectionPool;
 use TYPO3\CMS\Core\Utility\GeneralUtility;
+use TYPO3\CMS\Extbase\Object\ObjectManager;
+use TYPO3\CMS\Extbase\Persistence\Generic\PersistenceManager;
 
 /**
  * Class CrawlerControllerTest
@@ -49,6 +55,11 @@ class CrawlerControllerTest extends FunctionalTestCase
     protected $testExtensionsToLoad = ['typo3conf/ext/crawler'];
 
     /**
+     * @var ObjectManager
+     */
+    protected $objectManager;
+
+    /**
      * @var CrawlerController
      */
     protected $subject;
@@ -56,6 +67,7 @@ class CrawlerControllerTest extends FunctionalTestCase
     public function setUp()
     {
         parent::setUp();
+        $this->objectManager = GeneralUtility::makeInstance(ObjectManager::class);
         $this->importDataSet(dirname(__FILE__) . '/../Fixtures/sys_domain.xml');
         $this->importDataSet(dirname(__FILE__) . '/../Fixtures/tx_crawler_queue.xml');
         $this->importDataSet(dirname(__FILE__) . '/../Fixtures/tx_crawler_process.xml');
@@ -105,7 +117,7 @@ class CrawlerControllerTest extends FunctionalTestCase
      */
     public function CLI_deleteProcessesMarkedDeleted()
     {
-        $processRepository = new ProcessRepository();
+        $processRepository = $this->objectManager->get(ProcessRepository::class);
 
         $expectedProcessesBeforeDeletion = 5;
         $this->assertEquals(
@@ -142,7 +154,7 @@ class CrawlerControllerTest extends FunctionalTestCase
                 'tx_crawler_queue',
                 [
                     'exec_time' => time() + (7 * 24 * 60 * 60),
-                    'scheduled' => time() + (7 * 24 * 60 * 60)
+                    'scheduled' => time() + (7 * 24 * 60 * 60),
                 ]
             );
         }
@@ -172,7 +184,7 @@ class CrawlerControllerTest extends FunctionalTestCase
      */
     public function flushQueue($where, $expected)
     {
-        $queryRepository = GeneralUtility::makeInstance(QueueRepository::class);
+        $queryRepository = $this->objectManager->get(QueueRepository::class);
         $this->subject->_call('flushQueue', $where);
 
         $this->assertEquals(
@@ -229,7 +241,7 @@ class CrawlerControllerTest extends FunctionalTestCase
         $configuration = [
             'paramExpanded' => 'extendedParameter',
             'URLs' => 'URLs',
-            'NotImportantParameter' => 'value not important'
+            'NotImportantParameter' => 'value not important',
         ];
 
         $originalCheckSum = md5(serialize($configuration));
@@ -260,6 +272,107 @@ class CrawlerControllerTest extends FunctionalTestCase
     }
 
     /**
+     * @test
+     */
+    public function CLI_checkAndAcquireNewProcessExpectingSuccessAndReturnTrue()
+    {
+
+        $objectManager = GeneralUtility::makeInstance(ObjectManager::class);
+        $processRepository = $objectManager->get(ProcessRepository::class);
+
+        // Set the Process Limit to 10, to ensure additional processes can be added.
+        $this->subject->setExtensionSettings([
+            'processLimit' => 10,
+        ]);
+
+        /** @var QueryBuilder $queryBuilder */
+        $queryBuilder = $queryBuilder = GeneralUtility::makeInstance(ConnectionPool::class)->getQueryBuilderForTable('tx_crawler_process');
+        $time = (time() + 40000);
+        // Add new process records to have ttl higher than current time
+        for ($i = 0; $i < 4; $i++) {
+            $queryBuilder
+                ->insert('tx_crawler_process')
+                ->values([
+                    'ttl' => $time,
+                    'process_id' => 3000 + $i,
+                    'active' => true,
+                ])
+                ->execute();
+        }
+
+        $processesBefore = $processRepository->countActive();
+
+        // Checks that process is returning successfully
+        $this->assertTrue($this->subject->CLI_checkAndAcquireNewProcess(102030));
+        $processesAfter = $processRepository->countActive();
+
+        // Check that at least one process record is added.
+        $this->assertGreaterThan(
+            $processesBefore,
+            $processesAfter
+        );
+    }
+
+    /**
+     * @test
+     */
+    public function CLI_checkAndAcquireNewProcessExpectingToReturnFalseBecauseOfProcessLimitExceeded()
+    {
+        $objectManager = GeneralUtility::makeInstance(ObjectManager::class);
+        $processRepository = $objectManager->get(ProcessRepository::class);
+
+        // Set the Process Limit to 3, to ensure that to many process are active and new ones cannot be started
+        $this->subject->setExtensionSettings([
+            'processLimit' => 5,
+        ]);
+
+        /** @var QueryBuilder $queryBuilder */
+        $queryBuilder = $queryBuilder = GeneralUtility::makeInstance(ConnectionPool::class)->getQueryBuilderForTable('tx_crawler_process');
+        $time = (time() + 4000);
+        // Add new process records to have ttl higher than current time
+        for ($i = 0; $i < 5; $i++) {
+            $queryBuilder
+                ->insert('tx_crawler_process')
+                ->values([
+                    'ttl' => $time,
+                    'process_id' => 4000 + $i,
+                    'active' => true,
+                ])
+                ->execute();
+        }
+
+        $id = 1000;
+        $processesBefore = $processRepository->countAllByProcessId($id);
+
+        // Checks that process is returning successfully
+        $this->assertFalse($this->subject->CLI_checkAndAcquireNewProcess($id));
+        $processesAfter = $processRepository->countAllByProcessId($id);
+
+        // Check that no process record is added.
+        $this->assertEquals(
+            $processesBefore,
+            $processesAfter
+        );
+    }
+
+    /**
+     * @test
+     */
+    public function getConfigurationsForBranch()
+    {
+        $GLOBALS['BE_USER'] = $this->getMockBuilder(BackendUserAuthentication::class)
+            ->disableOriginalConstructor()
+            ->setMethods(['isAdmin'])
+            ->getMock();
+
+        $this->assertEquals(
+            [],
+            $this->subject->getConfigurationsForBranch(6,999)
+        );
+    }
+
+
+    /**
      * @return array
      */
     public function getLogEntriesForSetIdDataProvider()
@@ -271,7 +384,7 @@ class CrawlerControllerTest extends FunctionalTestCase
                 'doFlush' => true,
                 'doFullFlush' => false,
                 'itemsPerPage' => 5,
-                'expected' => []
+                'expected' => [],
             ],
             'Do Full Flush' => [
                 'setId' => 456,
@@ -279,7 +392,7 @@ class CrawlerControllerTest extends FunctionalTestCase
                 'doFlush' => true,
                 'doFullFlush' => true,
                 'itemsPerPage' => 5,
-                'expected' => []
+                'expected' => [],
             ],
             'Check that doFullFlush do not flush if doFlush is not true' => [
                 'setId' => 456,
@@ -300,8 +413,8 @@ class CrawlerControllerTest extends FunctionalTestCase
                     'process_scheduled' => '0',
                     'process_id' => '1007',
                     'process_id_completed' => 'asdfgh',
-                    'configuration' => 'ThirdConfiguration'
-                ]]
+                    'configuration' => 'ThirdConfiguration',
+                ]],
             ],
             'Get entries for set_id 456' => [
                 'setId' => 456,
@@ -322,8 +435,8 @@ class CrawlerControllerTest extends FunctionalTestCase
                     'process_scheduled' => '0',
                     'process_id' => '1007',
                     'process_id_completed' => 'asdfgh',
-                    'configuration' => 'ThirdConfiguration'
-                ]]
+                    'configuration' => 'ThirdConfiguration',
+                ]],
             ],
             'Do Flush Pending' => [
                 'setId' => 456,
@@ -331,7 +444,7 @@ class CrawlerControllerTest extends FunctionalTestCase
                 'doFlush' => true,
                 'doFullFlush' => false,
                 'itemsPerPage' => 5,
-                'expected' => []
+                'expected' => [],
             ],
             'Do Flush Finished' => [
                 'setId' => 456,
@@ -339,7 +452,7 @@ class CrawlerControllerTest extends FunctionalTestCase
                 'doFlush' => true,
                 'doFullFlush' => false,
                 'itemsPerPage' => 5,
-                'expected' => []
+                'expected' => [],
             ],
         ];
     }
@@ -356,7 +469,7 @@ class CrawlerControllerTest extends FunctionalTestCase
                 'doFlush' => true,
                 'doFullFlush' => false,
                 'itemsPerPage' => 5,
-                'expected' => []
+                'expected' => [],
             ],
             'Do Full Flush' => [
                 'id' => 1002,
@@ -364,7 +477,7 @@ class CrawlerControllerTest extends FunctionalTestCase
                 'doFlush' => true,
                 'doFullFlush' => true,
                 'itemsPerPage' => 5,
-                'expected' => []
+                'expected' => [],
             ],
             'Check that doFullFlush do not flush if doFlush is not true' => [
                 'id' => 2001,
@@ -385,8 +498,8 @@ class CrawlerControllerTest extends FunctionalTestCase
                     'process_scheduled' => '0',
                     'process_id' => '1006',
                     'process_id_completed' => 'qwerty',
-                    'configuration' => 'SecondConfiguration'
-                ]]
+                    'configuration' => 'SecondConfiguration',
+                ]],
             ],
             'Get entries for page_id 2001' => [
                 'id' => 2001,
@@ -406,9 +519,9 @@ class CrawlerControllerTest extends FunctionalTestCase
                     'result_data' => '',
                     'process_scheduled' => '0',
                     'process_id' => '1006',
-                     'process_id_completed' => 'qwerty',
-                    'configuration' => 'SecondConfiguration'
-                ]]
+                    'process_id_completed' => 'qwerty',
+                    'configuration' => 'SecondConfiguration',
+                ]],
             ],
 
         ];
@@ -422,20 +535,20 @@ class CrawlerControllerTest extends FunctionalTestCase
         return [
             'Flush Entire Queue' => [
                 'where' => '1=1',
-                'expected' => 0
+                'expected' => 0,
             ],
             'Flush Queue with specific configuration' => [
                 'where' => 'configuration = \'SecondConfiguration\'',
-                'expected' => 9
+                'expected' => 9,
             ],
             'Flush Queue for specific process id' => [
                 'where' => 'process_id = \'1007\'',
-                'expected' => 9
+                'expected' => 9,
             ],
             'Flush Queue for where that does not exist, nothing is deleted' => [
                 'where' => 'qid > 100000',
-                'expected' => 12
-            ]
+                'expected' => 12,
+            ],
         ];
     }
 
@@ -448,18 +561,18 @@ class CrawlerControllerTest extends FunctionalTestCase
             'With existing sys_domain' => [
                 'baseUrl' => 'www.baseurl-domain.tld',
                 'sysDomainUid' => 1,
-                'expected' => 'http://www.domain-one.tld'
+                'expected' => 'http://www.domain-one.tld',
             ],
             'Without exting sys_domain' => [
                 'baseUrl' => 'www.baseurl-domain.tld',
                 'sysDomainUid' => 2000,
-                'expected' => 'www.baseurl-domain.tld'
+                'expected' => 'www.baseurl-domain.tld',
             ],
             'With sys_domain uid with negative value' => [
                 'baseUrl' => 'www.baseurl-domain.tld',
                 'sysDomainUid' => -1,
-                'expected' => 'www.baseurl-domain.tld'
-            ]
+                'expected' => 'www.baseurl-domain.tld',
+            ],
         ];
     }
 
@@ -472,17 +585,17 @@ class CrawlerControllerTest extends FunctionalTestCase
             'No record found, uid not present' => [
                 'uid' => 3000,
                 'configurationHash' => '7b6919e533f334550b6f19034dfd2f81',
-                'expected' => true
+                'expected' => true,
             ],
             'No record found, configurationHash not present' => [
                 'uid' => 2001,
                 'configurationHash' => 'invalidConfigurationHash',
-                'expected' => true
+                'expected' => true,
             ],
             'Record found - uid and configurationHash is present' => [
                 'uid' => 2001,
                 'configurationHash' => '7b6919e533f334550b6f19034dfd2f81',
-                'expected' => false
+                'expected' => false,
             ],
         ];
     }
@@ -496,22 +609,22 @@ class CrawlerControllerTest extends FunctionalTestCase
             'Crawler Configuration set to http' => [
                 'crawlerConfiguration' => -1,
                 'pageConfiguration' => true,
-                'expected' => false
+                'expected' => false,
             ],
             'Crawler Configuration set to https' => [
                 'crawlerConfiguration' => 1,
                 'pageConfiguration' => false,
-                'expected' => true
+                'expected' => true,
             ],
             'Crawler Configuration set to page-configuration' => [
                 'crawlerConfiguration' => 0,
                 'pageConfiguration' => true,
-                'expected' => true
+                'expected' => true,
             ],
             'Crawler Configuration default fallback' => [
                 'crawlerConfiguration' => 99,
                 'pageConfiguration' => true,
-                'expected' => false
+                'expected' => false,
             ],
         ];
     }

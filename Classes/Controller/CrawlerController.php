@@ -30,6 +30,7 @@ use AOE\Crawler\Command\FlushCommandLineController;
 use AOE\Crawler\Command\QueueCommandLineController;
 use AOE\Crawler\Domain\Model\Configuration;
 use AOE\Crawler\Domain\Model\Process;
+use AOE\Crawler\Domain\Model\ProcessCollection;
 use AOE\Crawler\Domain\Model\Queue;
 use AOE\Crawler\Domain\Model\Reason;
 use AOE\Crawler\Domain\Repository\ConfigurationRepository;
@@ -192,6 +193,11 @@ class CrawlerController
      * @var ConfigurationRepository
      */
     protected $configurationRepository;
+
+    /**
+     * @var string
+     */
+    protected $tableCrawlerProcess = 'tx_crawler_process';
 
     /**
      * Method to set the accessMode can be gui, cli or cli_im
@@ -2474,14 +2480,13 @@ class CrawlerController
 
     /**
      * Try to acquire a new process with the given id
-     * also performs some auto-cleanup for orphan processes
-     * @todo preemption might not be the most elegant way to clean up
      *
      * @param string $id identification string for the process
      * @return boolean
      */
     public function CLI_checkAndAcquireNewProcess($id)
     {
+        $processCount = 0;
         $ret = true;
 
         $systemProcessId = getmypid();
@@ -2489,23 +2494,14 @@ class CrawlerController
             return false;
         }
 
-        $processCount = 0;
-        $orphanProcesses = [];
-
-        $GLOBALS['TYPO3_DB']->sql_query('BEGIN');
-
-        $res = $GLOBALS['TYPO3_DB']->exec_SELECTquery(
-            'process_id,ttl',
-            'tx_crawler_process',
-            'active=1 AND deleted=0'
-            );
-
+        /** @var ProcessCollection $activeProcesses */
+        $activeProcesses = $this->processRepository->findAllActive();
         $currentTime = $this->getCurrentTime();
 
-        while ($row = $GLOBALS['TYPO3_DB']->sql_fetch_assoc($res)) {
-            if ($row['ttl'] < $currentTime) {
-                $orphanProcesses[] = $row['process_id'];
-            } else {
+        /** @var Process $activeProcess */
+        foreach($activeProcesses as $activeProcess) {
+
+            if ($activeProcess->getTtl() > $currentTime) {
                 $processCount++;
             }
         }
@@ -2515,25 +2511,21 @@ class CrawlerController
             $this->CLI_debug("add process " . $this->CLI_buildProcessId() . " (" . ($processCount + 1) . "/" . intval($this->extensionSettings['processLimit']) . ")");
 
             // create new process record
-            $GLOBALS['TYPO3_DB']->exec_INSERTquery(
-                'tx_crawler_process',
-                [
-                    'process_id' => $id,
-                    'active' => '1',
+            // Todo: This should be changed to add an object instead of SQL entry.
+            $queryBuilder = $queryBuilder = GeneralUtility::makeInstance(ConnectionPool::class)->getQueryBuilderForTable('tx_crawler_process');
+            $queryBuilder
+                ->insert('tx_crawler_process')
+                ->values([
                     'ttl' => ($currentTime + intval($this->extensionSettings['processMaxRunTime'])),
-                    'system_process_id' => $systemProcessId,
-                ]
-                );
+                    'process_id' => $id,
+                    'active' => true,
+                    'system_process_id' => $systemProcessId
+                ])
+                ->execute();
         } else {
             $this->CLI_debug("Processlimit reached (" . ($processCount) . "/" . intval($this->extensionSettings['processLimit']) . ")");
             $ret = false;
         }
-
-
-        $this->CLI_releaseProcesses($orphanProcesses, true); // maybe this should be somehow included into the current lock
-        $this->CLI_deleteProcessesMarkedDeleted();
-
-        $GLOBALS['TYPO3_DB']->sql_query('COMMIT');
 
         return $ret;
     }
@@ -2544,6 +2536,8 @@ class CrawlerController
      * @param  mixed    $releaseIds   string with a single process-id or array with multiple process-ids
      * @param  boolean  $withinLock   show whether the DB-actions are included within an existing lock
      * @return boolean
+     *
+     * @deprecated since crawler v6.5.0, will be removed in crawler v7.0.0.
      */
     public function CLI_releaseProcesses($releaseIds, $withinLock = false)
     {
@@ -2612,6 +2606,8 @@ class CrawlerController
      * Delete processes marked as deleted
      *
      * @return void
+     *
+     * @deprecated since crawler v6.5.0, will be removed in crawler v7.0.0.
      */
     public function CLI_deleteProcessesMarkedDeleted()
     {
