@@ -32,7 +32,6 @@ use AOE\Crawler\Utility\ProcessUtility;
 use TYPO3\CMS\Core\Database\ConnectionPool;
 use TYPO3\CMS\Core\Utility\GeneralUtility;
 use TYPO3\CMS\Extbase\Object\ObjectManager;
-use TYPO3\CMS\Extbase\Object\ObjectManagerInterface;
 use TYPO3\CMS\Extbase\Persistence\Repository;
 
 /**
@@ -57,21 +56,11 @@ class ProcessRepository extends Repository
      */
     protected $queueRepository;
 
-    /**
-     * @var ObjectManager
-     */
-    protected $objectManager;
-
-    public function injectObjectManager(ObjectManagerInterface $objectManager)
+    public function initializeObject()
     {
-        $this->objectManager = $objectManager;
-    }
-
-    public function __construct()
-    {
-        parent::__construct($this->objectManager);
+        $objectManager = GeneralUtility::makeInstance(ObjectManager::class);
         $this->extensionSettings = ExtensionSettingUtility::loadExtensionSettings();
-        $this->queueRepository = $this->objectManager->get(QueueRepository::class);
+        $this->queueRepository = $objectManager->get(QueueRepository::class);
     }
 
     /**
