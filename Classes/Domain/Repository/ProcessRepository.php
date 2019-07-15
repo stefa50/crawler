@@ -68,7 +68,7 @@ class ProcessRepository extends Repository
      *
      * @return ProcessCollection
      */
-    public function findAll(): ProcessCollection
+    public function findAll()
     {
         /** @var ProcessCollection $collection */
         $collection = GeneralUtility::makeInstance(ProcessCollection::class);
@@ -127,7 +127,7 @@ class ProcessRepository extends Repository
      *
      * @return void
      */
-    public function removeByProcessId($processId): void
+    public function removeByProcessId($processId)
     {
         $queryBuilder = GeneralUtility::makeInstance(ConnectionPool::class)->getQueryBuilderForTable($this->tableName);
 
@@ -360,7 +360,7 @@ class ProcessRepository extends Repository
      *
      * @return string
      */
-    public static function getLimitFromItemCountAndOffset($itemCount, $offset): string
+    public static function getLimitFromItemCountAndOffset($itemCount, $offset)
     {
         $itemCount = filter_var($itemCount, FILTER_VALIDATE_INT, ['options' => ['min_range' => 1, 'default' => 20]]);
         $offset = filter_var($offset, FILTER_VALIDATE_INT, ['options' => ['min_range' => 0, 'default' => 0]]);
