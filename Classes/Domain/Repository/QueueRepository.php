@@ -46,6 +46,39 @@ class QueueRepository extends Repository
     protected $tableName = 'tx_crawler_queue';
 
     /**
+     * @param int $pageId
+     *
+     * @return array
+     */
+    public function findByPageId($pageId)
+    {
+        $queryBuilder = GeneralUtility::makeInstance(ConnectionPool::class)->getQueryBuilderForTable($this->tableName);
+        $statement = $queryBuilder
+            ->select('*')
+            ->from($this->tableName)
+            ->where(
+                $queryBuilder->expr()->eq('page_id', $queryBuilder->createNamedParameter($pageId, \PDO::PARAM_INT))
+            )->execute();
+
+        return $statement->fetch(0);
+    }
+
+    /**
+     * @return int
+     */
+    public function getLastInsertedQid()
+    {
+        $queryBuilder = GeneralUtility::makeInstance(ConnectionPool::class)->getQueryBuilderForTable($this->tableName);
+        $statement = $queryBuilder
+            ->select('qid')
+            ->from($this->tableName)
+            ->orderBy('qid', 'DESC')
+            ->execute();
+
+        return $statement->fetchColumn(0);
+    }
+
+    /**
      * @param $processId
      */
     public function unsetQueueProcessId($processId)

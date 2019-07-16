@@ -1492,18 +1492,28 @@ class CrawlerController
     /**
      * Read URL for not-yet-inserted log-entry
      *
-     * @param array $field_array Queue field array,
+     * @param $field_array array Queue field-array,
      *
-     * @return string
+     * @return bool|string
+     *
+     * @throws \TYPO3\CMS\Extbase\SignalSlot\Exception\InvalidSlotException
+     * @throws \TYPO3\CMS\Extbase\SignalSlot\Exception\InvalidSlotReturnException
      */
     public function readUrlFromArray($field_array)
     {
+        $objectManager = GeneralUtility::makeInstance(ObjectManager::class);
+        $queueRepository = $objectManager->get(QueueRepository::class);
 
-            // Set exec_time to lock record:
+        // Set exec_time to lock record:
         $field_array['exec_time'] = $this->getCurrentTime();
-        $GLOBALS['TYPO3_DB']->exec_INSERTquery('tx_crawler_queue', $field_array);
-        $queueId = $field_array['qid'] = $GLOBALS['TYPO3_DB']->sql_insert_id();
 
+        $queryBuilder = GeneralUtility::makeInstance(ConnectionPool::class)->getQueryBuilderForTable(self::TABLE_CRAWLER_QUEUE);
+        $queryBuilder
+            ->insert(self::TABLE_CRAWLER_QUEUE)
+            ->values($field_array)
+            ->execute();
+
+        $queueId = $field_array['qid'] = $queueRepository->getLastInsertedQid();
         $result = $this->readUrl_exec($field_array);
 
         // Set result in log which also denotes the end of the processing of this entry.
@@ -1516,7 +1526,19 @@ class CrawlerController
             $signalPayload
         );
 
-        $GLOBALS['TYPO3_DB']->exec_UPDATEquery('tx_crawler_queue', 'qid=' . intval($queueId), $field_array);
+        $statement = $queryBuilder
+            ->update(self::TABLE_CRAWLER_QUEUE)
+            ->where(
+                $queryBuilder->expr()->eq('qid', $queryBuilder->createNamedParameter($queueId))
+            );
+
+        // Didn't find a better way to set multiple values and as the SignalSlot could adjust more values
+        // than just the result_data, we will stay with this option for now.
+        foreach($field_array as $key => $value) {
+            $statement->set($key, $value);
+        }
+
+        $statement->execute();
 
         return $result;
     }

@@ -27,6 +27,7 @@ namespace AOE\Crawler\Tests\Functional\Controller;
 
 use AOE\Crawler\Controller\CrawlerController;
 use AOE\Crawler\Domain\Model\Process;
+use AOE\Crawler\Domain\Model\Queue;
 use AOE\Crawler\Domain\Repository\ProcessRepository;
 use AOE\Crawler\Domain\Repository\QueueRepository;
 use Doctrine\DBAL\Query\QueryBuilder;
@@ -403,6 +404,51 @@ class CrawlerControllerTest extends FunctionalTestCase
         $this->assertEquals(
             $expected,
             $mockedCrawlerController->_call('getDuplicateRowsIfExist', $tstamp, $fieldArray)
+        );
+    }
+
+    /**
+     * @test
+     */
+    public function readUrlFromArray()
+    {
+        $objectManager = GeneralUtility::makeInstance(ObjectManager::class);
+        $queueRepository = $objectManager->get(QueueRepository::class);
+
+        $mockedResult = [
+            'content' => 'This is just test content'
+        ];
+
+        $mockedCrawlerController = $this->getAccessibleMock(CrawlerController::class, ['readUrl_exec']);
+        $mockedCrawlerController->expects($this->any())->method('readUrl_exec')->willReturn($mockedResult);
+
+        $fieldArray = [
+            'page_id' => 1000000,
+            'parameters' => '',
+            'parameters_hash' => '',
+            'result_data' => '',
+        ];
+
+        $countBefore = $queueRepository->countAll();
+
+        $result = $mockedCrawlerController->readUrlFromArray($fieldArray);
+
+        // Checking that the mock for readUrl_exec works
+        $this->assertEquals(
+            $mockedResult,
+            $result
+        );
+
+        $this->assertGreaterThan(
+            $countBefore,
+            $queueRepository->countAll()
+        );
+
+        $queueObject = $queueRepository->findByPageId(1000000);
+
+        $this->assertEquals(
+            serialize($result),
+            $queueObject['result_data']
         );
     }
 
