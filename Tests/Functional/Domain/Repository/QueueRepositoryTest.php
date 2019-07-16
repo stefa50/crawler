@@ -211,6 +211,11 @@ class QueueRepositoryTest extends FunctionalTestCase
                 'scheduled' => 1245,
             ],
             [
+                'count_value' => 2,
+                'set_id' => 0,
+                'scheduled' => 12,
+            ],
+            [
                 'count_value' => 6,
                 'set_id' => 0,
                 'scheduled' => 0,
@@ -265,7 +270,7 @@ class QueueRepositoryTest extends FunctionalTestCase
      */
     public function getUnprocessedItems()
     {
-        $expected = [4, 6, 8, 9, 15];
+        $expected = [4, 6, 8, 9, 15, 18, 19];
         // We only compare on qid to make the comparison easier
         $actually = [];
         foreach ($this->subject->getUnprocessedItems() as $item) {
@@ -283,7 +288,7 @@ class QueueRepositoryTest extends FunctionalTestCase
     public function countUnprocessedItems()
     {
         $this->assertEquals(
-            5,
+            7,
             $this->subject->countUnprocessedItems()
         );
     }
@@ -294,7 +299,7 @@ class QueueRepositoryTest extends FunctionalTestCase
     public function countAllPendingItems()
     {
         $this->assertEquals(
-            5,
+            7,
             $this->subject->countAllPendingItems()
         );
     }
@@ -316,7 +321,7 @@ class QueueRepositoryTest extends FunctionalTestCase
     public function countAllUnassignedPendingItems()
     {
         $this->assertEquals(
-            2,
+            4,
             $this->subject->countAllUnassignedPendingItems()
         );
     }
@@ -334,7 +339,7 @@ class QueueRepositoryTest extends FunctionalTestCase
             ],
             1 => [
                 'configuration' => 'SecondConfiguration',
-                'unprocessed' => 1,
+                'unprocessed' => 3,
                 'assignedButUnprocessed' => 1,
             ],
             2 => [
@@ -452,7 +457,7 @@ class QueueRepositoryTest extends FunctionalTestCase
     public function countAll()
     {
         $this->assertEquals(
-            12,
+            14,
             $this->subject->countAll()
         );
     }

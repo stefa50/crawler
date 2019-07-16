@@ -44,6 +44,9 @@ use TYPO3\CMS\Backend\Tree\View\PageTreeView;
 use TYPO3\CMS\Core\Authentication\BackendUserAuthentication;
 use TYPO3\CMS\Core\Database\ConnectionPool;
 use TYPO3\CMS\Core\Database\DatabaseConnection;
+use TYPO3\CMS\Core\Database\Query\Restriction\DeletedRestriction;
+use TYPO3\CMS\Core\Database\Query\Restriction\HiddenRestriction;
+use TYPO3\CMS\Core\Database\Query\Restriction\WorkspaceRestriction;
 use TYPO3\CMS\Core\Log\LogLevel;
 use TYPO3\CMS\Core\TimeTracker\NullTimeTracker;
 use TYPO3\CMS\Core\TimeTracker\TimeTracker;
@@ -71,6 +74,10 @@ class CrawlerController
     const CLI_STATUS_PROCESSED = 2; //(some) queue items where processed
     const CLI_STATUS_ABORTED = 4; //instance didn't finish
     const CLI_STATUS_POLLABLE_PROCESSED = 8;
+
+    const TABLE_CRAWLER_CONFIGURATION = 'tx_crawler_configuration';
+    const TABLE_CRAWLER_PROCESS = 'tx_crawler_process';
+    const TABLE_CRAWLER_QUEUE = 'tx_crawler_queue';
 
     /**
      * @var integer
@@ -407,10 +414,10 @@ class CrawlerController
      */
     protected function noUnprocessedQueueEntriesForPageWithConfigurationHashExist($uid, $configurationHash)
     {
-        $queryBuilder = GeneralUtility::makeInstance(ConnectionPool::class)->getQueryBuilderForTable('tx_crawler_queue');
+        $queryBuilder = GeneralUtility::makeInstance(ConnectionPool::class)->getQueryBuilderForTable(self::TABLE_CRAWLER_QUEUE);
         $count = $queryBuilder
             ->count('*')
-            ->from('tx_crawler_queue')
+            ->from(self::TABLE_CRAWLER_QUEUE)
             ->where(
                 $queryBuilder->expr()->eq('page_id', $queryBuilder->createNamedParameter($uid, \PDO::PARAM_INT)),
                 $queryBuilder->expr()->eq('configuration_hash', $queryBuilder->createNamedParameter($configurationHash, \PDO::PARAM_STR)),
@@ -799,19 +806,24 @@ class CrawlerController
             $pids[] = $node['row']['uid'];
         }
 
-        $res = $GLOBALS['TYPO3_DB']->exec_SELECTquery(
-            '*',
-            'tx_crawler_configuration',
-            'pid IN (' . implode(',', $pids) . ') ' .
-            BackendUtility::BEenableFields('tx_crawler_configuration') .
-            BackendUtility::deleteClause('tx_crawler_configuration') . ' ' .
-            BackendUtility::versioningPlaceholderClause('tx_crawler_configuration') . ' '
-        );
+        $queryBuilder =  GeneralUtility::makeInstance(ConnectionPool::class)->getQueryBuilderForTable(self::TABLE_CRAWLER_CONFIGURATION);
+        $queryBuilder->getRestrictions()
+            ->removeAll()
+            ->add(GeneralUtility::makeInstance(DeletedRestriction::class))
+            ->add(GeneralUtility::makeInstance(HiddenRestriction::class))
+            ->add(GeneralUtility::makeInstance(WorkspaceRestriction::class));
+        $statement =  $queryBuilder
+            ->select('*')
+            ->from(self::TABLE_CRAWLER_CONFIGURATION)
+            ->where(
+                $queryBuilder->expr()->in('pid', $pids)
+            )
+            ->execute();
 
-        while ($row = $GLOBALS['TYPO3_DB']->sql_fetch_assoc($res)) {
+        while ($row = $statement->fetch()) {
             $configurationsForBranch[] = $row['name'];
         }
-        $GLOBALS['TYPO3_DB']->sql_free_result($res);
+
         return $configurationsForBranch;
     }
 
@@ -1037,17 +1049,16 @@ class CrawlerController
      */
     public function getLogEntriesForPageId($id, $filter = '', $doFlush = false, $doFullFlush = false, $itemsPerPage = 10)
     {
-        $tableName = 'tx_crawler_queue';
-        $queryBuilder = GeneralUtility::makeInstance(ConnectionPool::class)->getQueryBuilderForTable($tableName);
+        $queryBuilder = GeneralUtility::makeInstance(ConnectionPool::class)->getQueryBuilderForTable(self::TABLE_CRAWLER_QUEUE);
         $queryBuilder
             ->select('*')
-            ->from($tableName)
+            ->from(self::TABLE_CRAWLER_QUEUE)
             ->where(
                 $queryBuilder->expr()->eq('page_id', $queryBuilder->createNamedParameter($id, \PDO::PARAM_INT))
             )
             ->orderBy('scheduled', 'DESC');
         $expressionBuilder = GeneralUtility::makeInstance(ConnectionPool::class)
-            ->getConnectionForTable($tableName)
+            ->getConnectionForTable(self::TABLE_CRAWLER_QUEUE)
             ->getExpressionBuilder();
         $query = $expressionBuilder->andX();
 
@@ -1090,17 +1101,16 @@ class CrawlerController
      */
     public function getLogEntriesForSetId($set_id, $filter = '', $doFlush = false, $doFullFlush = false, $itemsPerPage = 10)
     {
-        $tableName = 'tx_crawler_queue';
-        $queryBuilder = GeneralUtility::makeInstance(ConnectionPool::class)->getQueryBuilderForTable($tableName);
+        $queryBuilder = GeneralUtility::makeInstance(ConnectionPool::class)->getQueryBuilderForTable(self::TABLE_CRAWLER_QUEUE);
         $queryBuilder
             ->select('*')
-            ->from($tableName)
+            ->from(self::TABLE_CRAWLER_QUEUE)
             ->where(
                 $queryBuilder->expr()->eq('set_id', $queryBuilder->createNamedParameter($set_id, \PDO::PARAM_INT))
             )
             ->orderBy('scheduled', 'DESC');
         $expressionBuilder = GeneralUtility::makeInstance(ConnectionPool::class)
-            ->getConnectionForTable($tableName)
+            ->getConnectionForTable(self::TABLE_CRAWLER_QUEUE)
             ->getExpressionBuilder();
         $query = $expressionBuilder->andX();
         // FIXME: Write Unit tests for Filters
@@ -1141,14 +1151,12 @@ class CrawlerController
      */
     protected function flushQueue($where = '')
     {
-        $tableName = 'tx_crawler_queue';
-
         $realWhere = strlen($where) > 0 ? $where : '1=1';
-        $queryBuilder = GeneralUtility::makeInstance(ConnectionPool::class)->getQueryBuilderForTable($tableName);
+        $queryBuilder = GeneralUtility::makeInstance(ConnectionPool::class)->getQueryBuilderForTable(self::TABLE_CRAWLER_QUEUE);
         if (EventDispatcher::getInstance()->hasObserver('queueEntryFlush')) {
             $groups = $queryBuilder
                 ->select('DISTINCT set_id')
-                ->from($tableName)
+                ->from(self::TABLE_CRAWLER_QUEUE)
                 ->where($realWhere)
                 ->execute()
                 ->fetchAll();
@@ -1156,7 +1164,7 @@ class CrawlerController
                 foreach ($groups as $group) {
                     $subSet = $queryBuilder
                         ->select('uid', 'set_id')
-                        ->from($tableName)
+                        ->from(self::TABLE_CRAWLER_QUEUE)
                         ->where(
                             $realWhere,
                             $queryBuilder->expr()->eq('set_id', $group['set_id'])
@@ -1168,7 +1176,7 @@ class CrawlerController
             }
         }
         $queryBuilder
-            ->delete($tableName)
+            ->delete(self::TABLE_CRAWLER_QUEUE)
             ->where($realWhere)
             ->execute();
     }
@@ -1325,39 +1333,51 @@ class CrawlerController
     protected function getDuplicateRowsIfExist($tstamp, $fieldArray)
     {
         $rows = [];
-
         $currentTime = $this->getCurrentTime();
+
+        $queryBuilder = GeneralUtility::makeInstance(ConnectionPool::class)->getQueryBuilderForTable(self::TABLE_CRAWLER_QUEUE);
+        $statement = $queryBuilder
+            ->select('qid')
+            ->from(self::TABLE_CRAWLER_QUEUE);
 
         //if this entry is scheduled with "now"
         if ($tstamp <= $currentTime) {
             if ($this->extensionSettings['enableTimeslot']) {
                 $timeBegin = $currentTime - 100;
                 $timeEnd = $currentTime + 100;
-                $where = ' ((scheduled BETWEEN ' . $timeBegin . ' AND ' . $timeEnd . ' ) OR scheduled <= ' . $currentTime . ') ';
+                $statement->where(
+                    $queryBuilder->expr()->andX(
+                        $queryBuilder->expr()->gte('scheduled', $timeBegin),
+                        $queryBuilder->expr()->lte('scheduled', $timeEnd),
+                        $queryBuilder->expr()->orX(
+                            $queryBuilder->expr()->lte('scheduled', $timeEnd)
+                        )
+                    )
+                );
             } else {
-                $where = 'scheduled <= ' . $currentTime;
+                $statement->where(
+                    $queryBuilder->expr()->lte('scheduled', $currentTime)
+                );
             }
         } elseif ($tstamp > $currentTime) {
             //entry with a timestamp in the future need to have the same schedule time
-            $where = 'scheduled = ' . $tstamp ;
+            $statement->where(
+                $queryBuilder->expr()->eq('scheduled', $tstamp)
+            );
         }
 
-        if (!empty($where)) {
-            $result = $GLOBALS['TYPO3_DB']->exec_SELECTgetRows(
-                'qid',
-                'tx_crawler_queue',
-                $where .
-                ' AND NOT exec_time' .
-                ' AND NOT process_id ' .
-                ' AND page_id=' . intval($fieldArray['page_id']) .
-                ' AND parameters_hash = ' . $GLOBALS['TYPO3_DB']->fullQuoteStr($fieldArray['parameters_hash'], 'tx_crawler_queue')
-            );
+        $statement->andWhere(
+            $queryBuilder->expr()->eq('exec_time', 0),
+            // It isn't that elegant with the empty string, but didn't find a better way.
+            $queryBuilder->expr()->eq('process_id', "''"),
+            $queryBuilder->expr()->eq('parameters_hash', $fieldArray['parameters_hash'] ? $queryBuilder->createNamedParameter($fieldArray['parameters_hash'], \PDO::PARAM_STR) : "''"),
+            $queryBuilder->expr()->eq('page_id', $fieldArray['page_id'])
+        );
 
-            if (is_array($result)) {
-                foreach ($result as $value) {
-                    $rows[] = $value['qid'];
-                }
-            }
+        $statement = $statement->execute();
+
+        while ($row = $statement->fetch()) {
+            $rows[] = $row['qid'];
         }
 
         return $rows;

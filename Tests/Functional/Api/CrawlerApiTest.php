@@ -4,7 +4,7 @@ namespace AOE\Crawler\Tests\Functional\Api;
 /***************************************************************
  *  Copyright notice
  *
- *  (c) 2018 AOE GmbH <dev@aoe.com>
+ *  (c) 2019 AOE GmbH <dev@aoe.com>
  *
  *  All rights reserved
  *
@@ -245,7 +245,7 @@ class CrawlerApiTest extends FunctionalTestCase
         $this->assertEquals(
             [
                 'assignedButUnprocessed' => '3',
-                'unprocessed' => '5'
+                'unprocessed' => '7'
             ],
             $this->subject->getQueueStatistics()
         );
@@ -273,6 +273,8 @@ class CrawlerApiTest extends FunctionalTestCase
      */
     public function canNotCreateDuplicateQueueEntriesForTwoPagesInThePast()
     {
+        $objectManager = GeneralUtility::makeInstance(ObjectManager::class);
+        $queueRepository = $objectManager->get(QueueRepository::class);
         $this->importDataSet(__DIR__ . '/../data/canNotAddDuplicatePagesToQueue.xml');
 
         $crawlerApi = $this->getMockedCrawlerAPI(100000);
@@ -280,7 +282,10 @@ class CrawlerApiTest extends FunctionalTestCase
         $crawlerApi->addPageToQueueTimed(5, 9998);
         $crawlerApi->addPageToQueueTimed(5, 3422);
 
-        $this->assertEquals($crawlerApi->countUnprocessedItems(), 1);
+        $this->assertEquals(
+            2,
+            $queueRepository->countUnprocessedItems()
+        );
     }
 
     /**

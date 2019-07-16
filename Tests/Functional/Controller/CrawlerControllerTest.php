@@ -385,6 +385,83 @@ class CrawlerControllerTest extends FunctionalTestCase
         );
     }
 
+    /**
+     * @test
+     * @dataProvider getDuplicateRowsIfExistDataProvider
+     */
+    public function getDuplicateRowsIfExist($timeslotActive, $tstamp, $current, $fieldArray, $expected)
+    {
+
+        $mockedCrawlerController = $this->getAccessibleMock(CrawlerController::class, ['getCurrentTime']);
+        $mockedCrawlerController->expects($this->any())->method('getCurrentTime')->willReturn($current);
+
+        $mockedCrawlerController->setExtensionSettings([
+            'enableTimeslot' => $timeslotActive,
+        ]);
+
+
+        $this->assertEquals(
+            $expected,
+            $mockedCrawlerController->_call('getDuplicateRowsIfExist', $tstamp, $fieldArray)
+        );
+    }
+
+    public function getDuplicateRowsIfExistDataProvider()
+    {
+        return [
+            'EnableTimeslot is true and timestamp is <= current' => [
+                'timeslotActive' => true,
+                'tstamp' => 10,
+                'current' => 12,
+                'fieldArray' => [
+                    'page_id' => 15,
+                    'parameters_hash' => ''
+                ],
+                'expected' => [15,18]
+            ],
+            'EnableTimeslot is false and timestamp is <= current' => [
+                'timeslotActive' => false,
+                'tstamp' => 11,
+                'current' => 11,
+                'fieldArray' => [
+                    'page_id' => 15,
+                    'parameters_hash' => ''
+                ],
+                'expected' => [18]
+            ],
+            'EnableTimeslot is true and timestamp is > current' => [
+                'timeslotActive' => true,
+                'tstamp' => 12,
+                'current' => 10,
+                'fieldArray' => [
+                    'page_id' => 15,
+                    'parameters_hash' => ''
+                ],
+                'expected' => [15]
+            ],
+            'EnableTimeslot is false and timestamp is > current' => [
+                'timeslotActive' => false,
+                'tstamp' => 12,
+                'current' => 10,
+                'fieldArray' => [
+                    'page_id' => 15,
+                    'parameters_hash' => ''
+                ],
+                'expected' => [15]
+            ],
+            'EnableTimeslot is false and timestamp is > current and parameters_hash is set' => [
+                'timeslotActive' => false,
+                'tstamp' => 12,
+                'current' => 10,
+                'fieldArray' => [
+                    'page_id' => 15,
+                    'parameters_hash' => 'NotReallyAHashButWillDoForTesting'
+                ],
+                'expected' => [19]
+            ],
+        ];
+    }
+
 
     /**
      * @return array
@@ -557,11 +634,11 @@ class CrawlerControllerTest extends FunctionalTestCase
             ],
             'Flush Queue for specific process id' => [
                 'where' => 'process_id = \'1007\'',
-                'expected' => 9,
+                'expected' => 11,
             ],
             'Flush Queue for where that does not exist, nothing is deleted' => [
                 'where' => 'qid > 100000',
-                'expected' => 12,
+                'expected' => 14,
             ],
         ];
     }
