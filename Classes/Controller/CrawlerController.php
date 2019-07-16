@@ -1501,19 +1501,13 @@ class CrawlerController
      */
     public function readUrlFromArray($field_array)
     {
-        $objectManager = GeneralUtility::makeInstance(ObjectManager::class);
-        $queueRepository = $objectManager->get(QueueRepository::class);
-
         // Set exec_time to lock record:
         $field_array['exec_time'] = $this->getCurrentTime();
 
-        $queryBuilder = GeneralUtility::makeInstance(ConnectionPool::class)->getQueryBuilderForTable(self::TABLE_CRAWLER_QUEUE);
-        $queryBuilder
-            ->insert(self::TABLE_CRAWLER_QUEUE)
-            ->values($field_array)
-            ->execute();
+        $connection = GeneralUtility::makeInstance(ConnectionPool::class)->getConnectionForTable(self::TABLE_CRAWLER_QUEUE);
+        $connection->insert(self::TABLE_CRAWLER_QUEUE, $field_array);
 
-        $queueId = $field_array['qid'] = $queueRepository->getLastInsertedQid();
+        $queueId = $field_array['qid'] = $connection->lastInsertId(self::TABLE_CRAWLER_QUEUE);
         $result = $this->readUrl_exec($field_array);
 
         // Set result in log which also denotes the end of the processing of this entry.
@@ -1526,19 +1520,7 @@ class CrawlerController
             $signalPayload
         );
 
-        $statement = $queryBuilder
-            ->update(self::TABLE_CRAWLER_QUEUE)
-            ->where(
-                $queryBuilder->expr()->eq('qid', $queryBuilder->createNamedParameter($queueId))
-            );
-
-        // Didn't find a better way to set multiple values and as the SignalSlot could adjust more values
-        // than just the result_data, we will stay with this option for now.
-        foreach($field_array as $key => $value) {
-            $statement->set($key, $value);
-        }
-
-        $statement->execute();
+        $connection->update(self::TABLE_CRAWLER_QUEUE, $field_array, ['qid' => $queueId]);
 
         return $result;
     }

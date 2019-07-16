@@ -64,21 +64,6 @@ class QueueRepository extends Repository
     }
 
     /**
-     * @return int
-     */
-    public function getLastInsertedQid()
-    {
-        $queryBuilder = GeneralUtility::makeInstance(ConnectionPool::class)->getQueryBuilderForTable($this->tableName);
-        $statement = $queryBuilder
-            ->select('qid')
-            ->from($this->tableName)
-            ->orderBy('qid', 'DESC')
-            ->execute();
-
-        return $statement->fetchColumn(0);
-    }
-
-    /**
      * @param $processId
      */
     public function unsetQueueProcessId($processId)
