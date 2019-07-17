@@ -41,10 +41,8 @@ use TYPO3\CMS\Extbase\Persistence\Repository;
  */
 class ProcessRepository extends Repository
 {
-    /**
-     * @var string
-     */
-    protected $tableName = 'tx_crawler_process';
+
+    const TABLE_CRAWLER_PROCESS = 'tx_crawler_process';
 
     /**
      * @var array
@@ -72,11 +70,11 @@ class ProcessRepository extends Repository
     {
         /** @var ProcessCollection $collection */
         $collection = GeneralUtility::makeInstance(ProcessCollection::class);
-        $queryBuilder = GeneralUtility::makeInstance(ConnectionPool::class)->getQueryBuilderForTable($this->tableName);
+        $queryBuilder = GeneralUtility::makeInstance(ConnectionPool::class)->getQueryBuilderForTable(self::TABLE_CRAWLER_PROCESS);
 
         $statement = $queryBuilder
             ->select('*')
-            ->from($this->tableName)
+            ->from(self::TABLE_CRAWLER_PROCESS)
             ->orderBy('ttl', 'DESC')
             ->execute();
 
@@ -97,11 +95,11 @@ class ProcessRepository extends Repository
     {
         /** @var ProcessCollection $collection */
         $collection = GeneralUtility::makeInstance(ProcessCollection::class);
-        $queryBuilder = GeneralUtility::makeInstance(ConnectionPool::class)->getQueryBuilderForTable($this->tableName);
+        $queryBuilder = GeneralUtility::makeInstance(ConnectionPool::class)->getQueryBuilderForTable(self::TABLE_CRAWLER_PROCESS);
 
         $statement = $queryBuilder
             ->select('*')
-            ->from($this->tableName)
+            ->from(self::TABLE_CRAWLER_PROCESS)
             ->where(
                 $queryBuilder->expr()->eq('active', 1),
                 $queryBuilder->expr()->eq('deleted', 0)
@@ -129,13 +127,9 @@ class ProcessRepository extends Repository
      */
     public function removeByProcessId($processId)
     {
-        $queryBuilder = GeneralUtility::makeInstance(ConnectionPool::class)->getQueryBuilderForTable($this->tableName);
+        $connection = GeneralUtility::makeInstance(ConnectionPool::class)->getConnectionForTable(self::TABLE_CRAWLER_PROCESS);
+        $connection->delete(self::TABLE_CRAWLER_PROCESS, ['process_id' => (int)$processId]);
 
-        $queryBuilder
-            ->delete($this->tableName)
-            ->where(
-                $queryBuilder->expr()->eq('process_id', $queryBuilder->createNamedParameter($processId))
-            )->execute();
     }
 
     /**
@@ -145,10 +139,10 @@ class ProcessRepository extends Repository
      */
     public function countActive()
     {
-        $queryBuilder = GeneralUtility::makeInstance(ConnectionPool::class)->getQueryBuilderForTable($this->tableName);
+        $queryBuilder = GeneralUtility::makeInstance(ConnectionPool::class)->getQueryBuilderForTable(self::TABLE_CRAWLER_PROCESS);
         $count = $queryBuilder
             ->count('*')
-            ->from($this->tableName)
+            ->from(self::TABLE_CRAWLER_PROCESS)
             ->where(
                 $queryBuilder->expr()->eq('active', 1),
                 $queryBuilder->expr()->eq('deleted', 0)
@@ -167,11 +161,11 @@ class ProcessRepository extends Repository
      */
     public function getActiveProcessesOlderThanOneHour()
     {
-        $queryBuilder = GeneralUtility::makeInstance(ConnectionPool::class)->getQueryBuilderForTable($this->tableName);
+        $queryBuilder = GeneralUtility::makeInstance(ConnectionPool::class)->getQueryBuilderForTable(self::TABLE_CRAWLER_PROCESS);
         $activeProcesses = [];
         $statement = $queryBuilder
             ->select('process_id', 'system_process_id')
-            ->from($this->tableName)
+            ->from(self::TABLE_CRAWLER_PROCESS)
             ->where(
                 $queryBuilder->expr()->lte('ttl', intval(time() - $this->extensionSettings['processMaxRunTime'] - 3600)),
                 $queryBuilder->expr()->eq('active', 1)
@@ -194,10 +188,10 @@ class ProcessRepository extends Repository
      */
     public function getActiveOrphanProcesses()
     {
-        $queryBuilder = GeneralUtility::makeInstance(ConnectionPool::class)->getQueryBuilderForTable($this->tableName);
+        $queryBuilder = GeneralUtility::makeInstance(ConnectionPool::class)->getQueryBuilderForTable(self::TABLE_CRAWLER_PROCESS);
         $statement = $queryBuilder
             ->select('process_id', 'system_process_id')
-            ->from($this->tableName)
+            ->from(self::TABLE_CRAWLER_PROCESS)
             ->where(
                 $queryBuilder->expr()->lte('ttl', intval(time() - $this->extensionSettings['processMaxRunTime'])),
                 $queryBuilder->expr()->eq('active', 1)
@@ -303,10 +297,10 @@ class ProcessRepository extends Repository
      */
     public function countNotTimeouted($ttl)
     {
-        $queryBuilder = GeneralUtility::makeInstance(ConnectionPool::class)->getQueryBuilderForTable($this->tableName);
+        $queryBuilder = GeneralUtility::makeInstance(ConnectionPool::class)->getQueryBuilderForTable(self::TABLE_CRAWLER_PROCESS);
         $count = $queryBuilder
             ->count('*')
-            ->from($this->tableName)
+            ->from(self::TABLE_CRAWLER_PROCESS)
             ->where(
                 $queryBuilder->expr()->eq('deleted', 0),
                 $queryBuilder->expr()->gt('ttl', intval($ttl))
@@ -324,10 +318,10 @@ class ProcessRepository extends Repository
      */
     public function countAll()
     {
-        $queryBuilder = GeneralUtility::makeInstance(ConnectionPool::class)->getQueryBuilderForTable($this->tableName);
+        $queryBuilder = GeneralUtility::makeInstance(ConnectionPool::class)->getQueryBuilderForTable(self::TABLE_CRAWLER_PROCESS);
         $count = $queryBuilder
             ->count('*')
-            ->from($this->tableName)
+            ->from(self::TABLE_CRAWLER_PROCESS)
             ->execute()
             ->fetchColumn(0);
         return $count;
@@ -340,10 +334,10 @@ class ProcessRepository extends Repository
      */
     public function countAllByProcessId($processId)
     {
-        $queryBuilder = GeneralUtility::makeInstance(ConnectionPool::class)->getQueryBuilderForTable($this->tableName);
+        $queryBuilder = GeneralUtility::makeInstance(ConnectionPool::class)->getQueryBuilderForTable(self::TABLE_CRAWLER_PROCESS);
         $count = $queryBuilder
             ->count('*')
-            ->from($this->tableName)
+            ->from(self::TABLE_CRAWLER_PROCESS)
             ->where(
                 $queryBuilder->expr()->eq('process_id', $queryBuilder->createNamedParameter($processId))
             )
@@ -374,24 +368,14 @@ class ProcessRepository extends Repository
      */
     public function deleteProcessesWithoutItemsAssigned()
     {
-        $queryBuilder = GeneralUtility::makeInstance(ConnectionPool::class)->getQueryBuilderForTable($this->tableName);
-        $queryBuilder
-            ->delete($this->tableName)
-            ->where(
-                $queryBuilder->expr()->eq('assigned_items_count', 0)
-            )
-            ->execute();
+        $connection = GeneralUtility::makeInstance(ConnectionPool::class)->getConnectionForTable(self::TABLE_CRAWLER_PROCESS);
+        $connection->delete(self::TABLE_CRAWLER_PROCESS, ['assigned_items_count' => 0]);
     }
 
     public function deleteProcessesMarkedAsDeleted()
     {
-        $queryBuilder = GeneralUtility::makeInstance(ConnectionPool::class)->getQueryBuilderForTable($this->tableName);
-        $queryBuilder
-            ->delete($this->tableName)
-            ->where(
-                $queryBuilder->expr()->eq('deleted', 1)
-            )
-            ->execute();
+        $connection = GeneralUtility::makeInstance(ConnectionPool::class)->getConnectionForTable(self::TABLE_CRAWLER_PROCESS);
+        $connection->delete(self::TABLE_CRAWLER_PROCESS, ['deleted' => 1]);
     }
 
     /**

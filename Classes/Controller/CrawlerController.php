@@ -1287,8 +1287,14 @@ class CrawlerController
             }
 
             if (count($rows) == 0) {
-                $GLOBALS['TYPO3_DB']->exec_INSERTquery('tx_crawler_queue', $fieldArray);
-                $uid = $GLOBALS['TYPO3_DB']->sql_insert_id();
+                $connection = GeneralUtility::makeInstance(ConnectionPool::class)->getConnectionForTable(self::TABLE_CRAWLER_QUEUE);
+                $connection->insert(self::TABLE_CRAWLER_QUEUE, $fieldArray);
+                $uid = $connection->lastInsertId(self::TABLE_CRAWLER_QUEUE);
+                // If $uid === 0 the entry couldn't be added, and therefor we return false
+                if (0 === $uid) {
+                    return false;
+                }
+
                 $rows[] = $uid;
                 $urlAdded = true;
 

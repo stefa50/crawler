@@ -452,6 +452,86 @@ class CrawlerControllerTest extends FunctionalTestCase
         );
     }
 
+    /**
+     * @test
+     * @dataProvider addUrlDataProvider
+     */
+    public function addUrl($id, $url, $subCfg, $tstamp, $configurationHash, $skipInnerDuplicationCheck, $mockedDuplicateRowResult, $registerQueueEntriesInternallyOnly, $expected)
+    {
+        $mockedCrawlerController = $this->getAccessibleMock(CrawlerController::class, ['getDuplicateRowsIfExist']);
+        $mockedCrawlerController->expects($this->any())->method('getDuplicateRowsIfExist')->withAnyParameters()->willReturn($mockedDuplicateRowResult);
+
+        $mockedCrawlerController->_set('registerQueueEntriesInternallyOnly', $registerQueueEntriesInternallyOnly);
+
+        // Checking the mock of getDuplicateRowsIfExist()
+        $this->assertEquals(
+            $mockedDuplicateRowResult,
+            $mockedCrawlerController->_call('getDuplicateRowsIfExist', 1234, [])
+        );
+
+        $this->assertEquals(
+            $expected,
+            $mockedCrawlerController->addUrl($id, $url, $subCfg, $tstamp, $configurationHash, $skipInnerDuplicationCheck)
+        );
+    }
+
+    public function addUrlDataProvider()
+    {
+        return [
+            'Queue entry added' => [
+                'id' => 0,
+                'url' => '',
+                'subCfg' => [
+                    'key' => 'some-key',
+                    'procInstrFilter' => 'tx_crawler_post',
+                    'procInstrParams.' => [
+                        'action' => true
+                    ],
+                    'userGroups' => '12,14'
+                ],
+                'tstamp' => 1563287062,
+                'configurationHash' => '',
+                'skipInnerDuplicationCheck' => false,
+                'mockedDuplicateRowResult' => [],
+                'registerQueueEntriesInternallyOnly' => false,
+                'expected' => true,
+            ],
+            'Queue entry is NOT added, due to duplication check return not empty array (mocked)' => [
+                'id' => 0,
+                'url' => '',
+                'subCfg' =>  ['key' => 'some-key'],
+                'tstamp' => 1563287062,
+                'configurationHash' => '',
+                'skipInnerDuplicationCheck' => false,
+                'mockedDuplicateRowResult' => ['duplicate-exists' => true],
+                'registerQueueEntriesInternallyOnly' => false,
+                'expected' => false
+            ],
+            'Queue entry is added, due to duplication is ignored' => [
+                'id' => 0,
+                'url' => '',
+                'subCfg' =>  ['key' => 'some-key'],
+                'tstamp' => 1563287062,
+                'configurationHash' => '',
+                'skipInnerDuplicationCheck' => true,
+                'mockedDuplicateRowResult' => ['duplicate-exists' => true],
+                'registerQueueEntriesInternallyOnly' => false,
+                'expected' => true
+            ],
+            'Queue entry is NOT added, due to registerQueueEntriesInternalOnly' => [
+                'id' => 0,
+                'url' => '',
+                'subCfg' =>  ['key' => 'some-key'],
+                'tstamp' => 1563287062,
+                'configurationHash' => '',
+                'skipInnerDuplicationCheck' => true,
+                'mockedDuplicateRowResult' => ['duplicate-exists' => true],
+                'registerQueueEntriesInternallyOnly' => true,
+                'expected' => false
+            ],
+        ];
+    }
+
     public function getDuplicateRowsIfExistDataProvider()
     {
         return [
