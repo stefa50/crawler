@@ -475,6 +475,51 @@ class CrawlerControllerTest extends FunctionalTestCase
         );
     }
 
+    /**
+     * @test
+     * @dataProvider readUrlForSingleQueueEntryDataProvider
+     */
+    public function readUrlForSingleQueueEntry($queueId, $force, $expected)
+    {
+        $queueRepository = GeneralUtility::makeInstance(QueueRepository::class);
+        $queueObjectBefore = $queueRepository->findByQueueId($queueId);
+
+        $execTimeBefore = $queueObjectBefore['exec_time'];
+
+        $this->assertEquals(
+            $expected,
+            $this->subject->readUrl($queueId, $force)
+        );
+
+        $queueObjectAfter = $queueRepository->findByQueueId($queueId);
+        $execTimeAfter = $queueObjectAfter['exec_time'];
+
+        // We only check execTime before and after if a record is expected updated
+        if (false !== $expected) {
+            $this->assertGreaterThan(
+                $execTimeBefore,
+                $execTimeAfter
+            );
+        }
+    }
+
+    public function readUrlForSingleQueueEntryDataProvider()
+    {
+        return [
+            'Expecting false as exec_time > 0 and force is false' => [
+                'queueId' => 1,
+                'force' => false,
+                'expected' => false
+            ],
+            'Expecting true as exec_time > 0 and force is true' => [
+                'queueId' => 1,
+                'force' => true,
+                'expected' => 0
+            ]
+        ];
+    }
+
+
     public function addUrlDataProvider()
     {
         return [

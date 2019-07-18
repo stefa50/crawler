@@ -1414,19 +1414,28 @@ class CrawlerController
      */
     public function readUrl($queueId, $force = false)
     {
+        $queryBuilder = GeneralUtility::makeInstance(ConnectionPool::class)->getQueryBuilderForTable(self::TABLE_CRAWLER_QUEUE);
         $ret = 0;
         if ($this->debugMode) {
             GeneralUtility::devlog('crawler-readurl start ' . microtime(true), __FUNCTION__);
         }
         // Get entry:
-        list($queueRec) = $GLOBALS['TYPO3_DB']->exec_SELECTgetRows(
-            '*',
-            'tx_crawler_queue',
-            'qid=' . intval($queueId) . ($force ? '' : ' AND exec_time=0 AND process_scheduled > 0')
-        );
+        $queryBuilder
+            ->select('*')
+            ->from(self::TABLE_CRAWLER_QUEUE)
+            ->where(
+                $queryBuilder->expr()->eq('qid', $queryBuilder->createNamedParameter($queueId, \PDO::PARAM_INT))
+            );
+
+        if(!$force) {
+            $queryBuilder
+                ->andWhere('exec_time = 0')
+                ->andWhere('process_scheduled > 0');
+        }
+        $queueRec = $queryBuilder->execute()->fetch();
 
         if (!is_array($queueRec)) {
-            return;
+            return false;
         }
 
         $parameters = unserialize($queueRec['parameters']);
@@ -1454,7 +1463,13 @@ class CrawlerController
             //if mulitprocessing is used we need to store the id of the process which has handled this entry
             $field_array['process_id_completed'] = $this->processID;
         }
-        $GLOBALS['TYPO3_DB']->exec_UPDATEquery('tx_crawler_queue', 'qid=' . intval($queueId), $field_array);
+
+        GeneralUtility::makeInstance(ConnectionPool::class)->getConnectionForTable('tx_crawler_queue')
+            ->update(
+                'tx_crawler_queue',
+                $field_array,
+                [ 'qid' => (int)$queueId ]
+            );
 
         $result = $this->readUrl_exec($queueRec);
         $resultData = unserialize($result['content']);
@@ -1464,10 +1479,12 @@ class CrawlerController
             foreach ($GLOBALS['TYPO3_CONF_VARS']['EXTCONF']['crawler']['pollSuccess'] as $pollable) {
                 // only check the success value if the instruction is runnig
                 // it is important to name the pollSuccess key same as the procInstructions key
-                if (is_array($resultData['parameters']['procInstructions']) && in_array(
-                    $pollable,
-                        $resultData['parameters']['procInstructions']
-                )
+                if (is_array($resultData['parameters']['procInstructions'])
+                    && in_array(
+                        $pollable,
+                        $resultData['parameters']['procInstructions'],
+                        true
+                    )
                 ) {
                     if (!empty($resultData['success'][$pollable]) && $resultData['success'][$pollable]) {
                         $ret |= self::CLI_STATUS_POLLABLE_PROCESSED;
@@ -1486,7 +1503,12 @@ class CrawlerController
             $signalPayload
         );
 
-        $GLOBALS['TYPO3_DB']->exec_UPDATEquery('tx_crawler_queue', 'qid=' . intval($queueId), $field_array);
+        GeneralUtility::makeInstance(ConnectionPool::class)->getConnectionForTable('tx_crawler_queue')
+            ->update(
+                'tx_crawler_queue',
+                $field_array,
+                [ 'qid' => (int)$queueId ]
+            );
 
         if ($this->debugMode) {
             GeneralUtility::devlog('crawler-readurl stop ' . microtime(true), __FUNCTION__);

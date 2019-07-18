@@ -61,6 +61,23 @@ class QueueRepository extends Repository
     }
 
     /**
+     * @param $queueId
+     * @return array
+     */
+    public function findByQueueId($queueId)
+    {
+        $queryBuilder = GeneralUtility::makeInstance(ConnectionPool::class)->getQueryBuilderForTable(self::TABLE_CRAWLER_QUEUE);
+        $statement = $queryBuilder
+            ->select('*')
+            ->from(self::TABLE_CRAWLER_QUEUE)
+            ->where(
+                $queryBuilder->expr()->eq('qid', $queryBuilder->createNamedParameter($queueId, \PDO::PARAM_INT))
+            )->execute();
+
+        return $statement->fetch(0);
+    }
+
+    /**
      * @param $processId
      */
     public function unsetQueueProcessId($processId)
