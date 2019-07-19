@@ -503,6 +503,49 @@ class CrawlerControllerTest extends FunctionalTestCase
         }
     }
 
+    /**
+     * @test
+     */
+    public function getPageTreeAndUrls()
+    {
+        $this->setUpBackendUserFromFixture(1);
+
+        $id = 8;
+        $depth = 99;
+        $scheduledTime = 10;
+        $reqMinute = 200;
+        $submitCrawlUrls = '';
+        $downloadCrawlUrls = '';
+        $incomingProcInstructions = [];
+        $configurationSelection = [];
+
+        $output = $this->subject->getPageTreeAndUrls(
+            $id,
+            $depth,
+            $scheduledTime,
+            $reqMinute,
+            $submitCrawlUrls,
+            $downloadCrawlUrls,
+            $incomingProcInstructions,
+            $configurationSelection
+        );
+
+        $this->assertContains(
+            'Not hidden or deleted - uid 5',
+            $output
+        );
+
+        $this->assertContains(
+            'Page Uid 7',
+            $output
+        );
+
+        $this->assertContains(
+            'Mount Point - Crawler test',
+            $output
+        );
+    }
+
     public function readUrlForSingleQueueEntryDataProvider()
     {
         return [

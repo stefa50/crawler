@@ -1963,14 +1963,22 @@ class CrawlerController
 
             // recognize mount points
             if ($data['row']['doktype'] == 7) {
-                $mountpage = $GLOBALS['TYPO3_DB']->exec_SELECTgetRows('*', 'pages', 'uid = ' . $data['row']['uid']);
+
+                $queryBuilder = GeneralUtility::makeInstance(ConnectionPool::class)->getQueryBuilderForTable('pages');
+                $mountpage = $queryBuilder
+                    ->select('*')
+                    ->from('pages')
+                    ->where(
+                        $queryBuilder->expr()->eq('uid', $queryBuilder->createNamedParameter($data['row']['uid'], \PDO::PARAM_INT))
+                    )
+                    ->execute()->fetch(0);
 
                 // fetch mounted pages
-                $this->MP = $mountpage[0]['mount_pid'] . '-' . $data['row']['uid'];
+                $this->MP = $mountpage['mount_pid'] . '-' . $data['row']['uid'];
 
                 $mountTree = GeneralUtility::makeInstance(PageTreeView::class);
                 $mountTree->init('AND ' . $perms_clause);
-                $mountTree->getTree($mountpage[0]['mount_pid'], $depth, '');
+                $mountTree->getTree($mountpage['mount_pid'], $depth, '');
 
                 foreach ($mountTree->tree as $mountData) {
                     $code .= $this->drawURLs_addRowsForPage(
@@ -1980,8 +1988,8 @@ class CrawlerController
                 }
 
                 // replace page when mount_pid_ol is enabled
-                if ($mountpage[0]['mount_pid_ol']) {
-                    $data['row']['uid'] = $mountpage[0]['mount_pid'];
+                if ($mountpage['mount_pid_ol']) {
+                    $data['row']['uid'] = $mountpage['mount_pid'];
                 } else {
                     // if the mount_pid_ol is not set the MP must not be used for the mountpoint page
                     $this->MP = false;

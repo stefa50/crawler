@@ -42,4 +42,11 @@
 		<title>Page Uid 6</title>
 		<is_siteroot>0</is_siteroot>
 	</pages>
+	<pages>
+		<uid>8</uid>
+		<pid>5</pid>
+		<title>Mount Point - Crawler test</title>
+		<is_siteroot>0</is_siteroot>
+		<dokType>7</dokType>
+	</pages>
 </dataset>
