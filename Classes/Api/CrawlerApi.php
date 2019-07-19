@@ -249,7 +249,7 @@ class CrawlerApi
      * @param bool $timed_only
      * @param bool $timestamp
      *
-     * @deprecated since crawler v6.5.0, will be removed in crawler v7.0.0.
+     * @deprecated since crawler v6.5.1, will be removed in crawler v9.0.0.
      *
      * @return bool
      */
@@ -360,7 +360,7 @@ class CrawlerApi
     /**
      * Method to determine unprocessed Items in the crawler queue.
      *
-     * @deprecated since crawler v6.5.0, will be removed in crawler v7.0.0.
+     * @deprecated since crawler v6.5.1, will be removed in crawler v9.0.0.
      * @return array
      */
     public function getUnprocessedItems()
@@ -380,7 +380,7 @@ class CrawlerApi
      * Method to get the number of unprocessed items in the crawler
      *
      * @param int number of unprocessed items in the queue
-     * @deprecated since crawler v6.5.0, will be removed in crawler v7.0.0. Please use the QueueRepository instead
+     * @deprecated since crawler v6.5.1, will be removed in crawler v9.0.0. Please use the QueueRepository instead
      *
      * @return array
      */
@@ -427,7 +427,7 @@ class CrawlerApi
      * Removes an queue entry with a given queue id
      *
      * @param int $qid
-     * @deprecated since crawler v6.5.0, will be removed in crawler v7.0.0. please use the QueueRepository instead
+     * @deprecated since crawler v6.5.1, will be removed in crawler v9.0.0. Please use the QueueRepository instead
      *
      * @return void
      */

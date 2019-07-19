@@ -2597,7 +2597,7 @@ class CrawlerController
      * @param  boolean  $withinLock   show whether the DB-actions are included within an existing lock
      * @return boolean
      *
-     * @deprecated since crawler v6.5.0, will be removed in crawler v7.0.0.
+     * @deprecated since crawler v6.5.1, will be removed in crawler v9.0.0.
      */
     public function CLI_releaseProcesses($releaseIds, $withinLock = false)
     {
@@ -2667,7 +2667,7 @@ class CrawlerController
      *
      * @return void
      *
-     * @deprecated since crawler v6.5.0, will be removed in crawler v7.0.0.
+     * @deprecated since crawler v6.5.1, will be removed in crawler v9.0.0.
      */
     public function CLI_deleteProcessesMarkedDeleted()
     {
@@ -2686,7 +2686,7 @@ class CrawlerController
      * @param  string  identification string for the process
      * @return boolean determines if the process is still active / has resources
      *
-     * @deprecated since crawler v6.5.0, will be removed in crawler v7.0.0.
+     * @deprecated since crawler v6.5.1, will be removed in crawler v9.0.0.
      */
     public function CLI_checkIfProcessIsActive($pid)
     {
