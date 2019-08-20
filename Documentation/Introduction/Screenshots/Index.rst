@@ -16,9 +16,8 @@
 Screenshots
 ^^^^^^^^^^^
 
-Has a backend module which displays the queue and log and allows
-execution and status check of the “cronscript” from the backend for
-testing purposes.
+The extension has a backend module which displays the queue and log and allows
+execution and status check of the “cron script” from the backend.
 
 Here is the CLI (Command Line Interface = shell script = cron script)
 status display:

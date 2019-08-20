@@ -37,6 +37,5 @@ for several reasons;
 
    ExecutingQueueWithCron-job/Index
    RunViaBackend/Index
-   AddingEntriesToTheQueueByContextMenue/Index
    BuildingAndExecutingQueueRightAway(fromCli)/Index
 

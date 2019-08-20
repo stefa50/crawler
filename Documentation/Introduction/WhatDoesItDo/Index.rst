@@ -18,7 +18,7 @@
 What does it do?
 ^^^^^^^^^^^^^^^^
 
-Uses a command line cron-script to traverse a queue of actions
+The crawler extension uses a command line cron-script to traverse a queue of actions
 (alternative option: executing all immediately), eg. requesting a URL
 but could also be calling of a function. The name “crawler” refers to
 this action: That a URL in the queue is requested.

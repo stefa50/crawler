@@ -26,7 +26,7 @@ The script to use is this:
 
 ::
 
-   [pathToYourTYPO3Installation]/typo3/cli_dispatch.phpsh crawler_im
+   [path-to-composer-bin-dir]/typo3cms crawler:build
 
 If you run it you will see a list of options which explains usage.
 
