@@ -198,10 +198,10 @@ class ProcessService
         $current = $this->processRepository->countNotTimeouted($ttl);
 
         // Check whether OS is Windows
-        if (TYPO3_OS === 'WIN') {
-            $completePath = escapeshellcmd('start ' . $this->getCrawlerCliPath());
+        if (Environment::isWindows()) {
+            $completePath = 'start ' . $this->getCrawlerCliPath();
         } else {
-            $completePath = '(' . escapeshellcmd($this->getCrawlerCliPath()) . ' &) > /dev/null';
+            $completePath = '(' . $this->getCrawlerCliPath() . ' &) > /dev/null';
         }
 
         $fileHandler = CommandUtility::exec($completePath);
